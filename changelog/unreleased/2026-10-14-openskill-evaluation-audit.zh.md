@@ -3,6 +3,7 @@
 - **Date:** 2026-10-14
 - **Type:** process
 - **Scope:** `docs`, `skills`
+- **PR:** [#1](https://github.com/ArisaZz/penguin-harness/pull/1)
 
 [English](2026-10-14-openskill-evaluation-audit.md)
 

@@ -3,6 +3,7 @@
 - **Date:** 2026-10-15
 - **Type:** feature
 - **Scope:** `skills`
+- **PR:** [#1](https://github.com/ArisaZz/penguin-harness/pull/1)
 
 [English](2026-10-15-openskill-execution-records.md)
 

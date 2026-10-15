@@ -3,6 +3,7 @@
 - **Date:** 2026-10-13
 - **Type:** fix
 - **Scope:** `web`
+- **PR:** [#1](https://github.com/ArisaZz/penguin-harness/pull/1)
 
 [English](2026-10-13-openskill-evaluation-prompt.md)
 
