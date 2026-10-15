@@ -5171,6 +5171,12 @@ Benchmark：
         p.provider && p.modelId
           ? `- provider：\`${p.provider}\`\n- model_id：\`${p.modelId}\`\n`
           : "";
+      const evaluationProtocol =
+        p.skill === "openskill-rsi-toolkit"
+          ? "构建阶段仅使用独立虚拟测试反馈，不得读取 Benchmark 分数、评分细则或参考答案，也不得进行正式评测。" +
+            "全部 Case 的技能冻结后，才经技能自带的评测参考测量基线与冻结的最终版本；不得逐候选正式评分，也不得根据正式结果继续修订技能。" +
+            "固定被测智能体的运行时，仅将完整的正式评估以同一标签记入 scoreboard.yaml，虚拟测试结果单独保存；"
+          : "基线与每个候选都经技能自带的评测参考测量，固定被测智能体的运行时，每条完整评估都以同一标签记入 scoreboard.yaml；";
       return (
         `请使用 \`${p.skill}\` 技能，在冻结的 Benchmark 上对被测智能体运行它的方法。\n\n` +
         `- test_agent_id：\`${p.targetAgentId}\`\n` +
@@ -5180,7 +5186,7 @@ Benchmark：
         "\n" +
         (pinned !== "" ? "评测固定使用这组 provider 与模型。" : "") +
         "按原论文的流程运行，预算用技能的冒烟档（上文另有要求时以上文为准）；只问我方法必需而我没给的输入。" +
-        "基线与每个候选都经技能自带的评测参考测量，固定被测智能体的运行时，每条完整评估都以同一标签记入 scoreboard.yaml；" +
+        evaluationProtocol +
         "结束时报告基线分、最终分、保留的版本与方法改了什么。"
       );
     },

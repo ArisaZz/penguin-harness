@@ -1,7 +1,7 @@
 /**
  * The Evaluation Center's prompts and id helpers (src/features/benchmark/benchmark-prompts.ts).
- * Assertions on a tail's wording are language-agnostic: the ids, paths and Session ids it must
- * name, never the sentences around them, which differ per dictionary.
+ * Assertions cover the ids, paths and Session ids a prompt must carry, and the evaluation
+ * instructions that determine whether a method receives target supervision.
  *
  * - The Create-with-AI tail hands the benchmark-design Skill its tested Agent and the
  *   Project-level layout, and every evaluation records its tested Agent.
@@ -12,6 +12,11 @@
  * - An RSI toolkit's tail (any method but the default) names the toolkit's own Skill and the
  *   three inputs every toolkit takes, none of the default loop's Skills or knobs, and pins the
  *   evaluations to the baseline's provider and model only when it is given both.
+ * - Given OpenSkill in either language, its prompt uses virtual feedback during construction,
+ *   defers baseline and final target evaluation until all Cases' skills are frozen, and forbids
+ *   scoring intermediate candidates or revising skills from target feedback.
+ * - Given another paper toolkit, its prompt still requests baseline and candidate measurements
+ *   without imposing OpenSkill's freeze-before-evaluation protocol.
  * - The Evaluate tail, one for every Benchmark (Harbor or not), takes the model under test from
  *   the evaluator's own Session, since an agent stores none: in both dictionaries it names the
  *   Environment lines that carry the provider and the model id in the system prompt core renders.
@@ -192,6 +197,49 @@ describe("rsiOptimizeTail (a toolkit other than the default)", () => {
       const half = dict.benchmark.rsiOptimizeTail({ ...params, provider: "deepseek" });
       expect(half).not.toMatch(/provider|model_id/);
     });
+
+    it(`${locale}: OpenSkill keeps target supervision out of construction and measures only after freezing`, () => {
+      const tail = dict.benchmark.rsiOptimizeTail({
+        ...params,
+        skill: "openskill-rsi-toolkit",
+        provider: "deepseek",
+        modelId: "deepseek-v4-pro",
+      });
+      expect(tail).not.toMatch(/基线与每个候选|baseline and every candidate/);
+      expect(tail).toMatch(
+        /构建阶段仅使用独立虚拟测试反馈|During construction, use only independent virtual-test feedback/,
+      );
+      expect(tail).toMatch(
+        /不得读取 Benchmark 分数、评分细则或参考答案|do not read Benchmark scores, rubrics or reference solutions/,
+      );
+      expect(tail).toMatch(
+        /全部 Case 的技能冻结后，才.*测量基线与冻结的最终版本|Only after all Cases' skills are frozen, measure the baseline and the frozen final State/,
+      );
+      expect(tail).toMatch(/不得逐候选正式评分|do not evaluate intermediate candidates/);
+      expect(tail).toMatch(
+        /不得根据正式结果继续修订技能|do not evaluate intermediate candidates or revise skills using target results/,
+      );
+      expect(tail).toMatch(
+        /仅将完整的正式评估.*scoreboard.yaml.*虚拟测试结果单独保存|record only complete target evaluations.*scoreboard.yaml.*keep virtual-test results separate/,
+      );
+      expect(tail).toContain("`openskill-rsi-toolkit`");
+      expect(tail).toContain("`report-writer`");
+      expect(tail).toContain("`benchmarks/report-writing-v1/`");
+      expect(tail).toMatch(/runs[：:] ?`2`/);
+      expect(tail).toMatch(/provider[：:] ?`deepseek`/);
+      expect(tail).toMatch(/model_id[：:] ?`deepseek-v4-pro`/);
+      for (const marker of DEFAULT_LOOP) expect(tail).not.toContain(marker);
+    });
+
+    it.each(["ace", "ape", "awm", "opro"])(
+      `${locale}: %s still measures its baseline and candidates`,
+      (method) => {
+        const tail = dict.benchmark.rsiOptimizeTail({ ...params, skill: `${method}-rsi-toolkit` });
+        expect(tail).toMatch(/基线与每个候选|baseline and every candidate/);
+        expect(tail).not.toMatch(/全部 Case 的技能冻结后|Only after all Cases' skills are frozen/);
+        expect(tail).toContain("scoreboard.yaml");
+      },
+    );
   }
 });
 
