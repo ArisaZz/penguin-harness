@@ -25,7 +25,8 @@ sys.dont_write_bytecode = True
 
 import experiment
 from artifacts import digest, identifier, read_json, require, strings, tree
-from isolation import Boundary, CleanupFailed, copy_files, files, regular, save, stamp, stop_container
+from isolation import Boundary, CleanupFailed, copy_files, files, launch_lock, regular, save, stamp, stop_container
+from runtime import check_runtime
 
 HERE = Path(__file__).resolve().parent
 MODE = "isolated-v1"
@@ -78,7 +79,7 @@ def launch(config, sandbox, work, view, identity, prompt, runtime, deadline, rec
              "messages": str(record / "messages.jsonl"), "result": str(record / "result.json")}
     save(record / "launch.json", setup)
     process = None
-    started, completed = stamp(), False
+    started, completed, handshaken = stamp(), False, False
     argv = [config["node"], str(HERE / "launch.mjs"), str(record / "launch.json")]
     with (record / "launcher.log").open("wb") as log:
         try:
@@ -95,6 +96,7 @@ def launch(config, sandbox, work, view, identity, prompt, runtime, deadline, rec
                 ready = json.loads(line)
             sandbox.check()
             identity["session_id"] = ready["session_id"]
+            handshaken = True
             on_ready(identity)
             process.stdin.write(b"go\n")
             process.stdin.flush()
@@ -121,8 +123,8 @@ def launch(config, sandbox, work, view, identity, prompt, runtime, deadline, rec
                 process.stdin.close()
                 process.stdout.close()
             receipt = {"argv": argv, "started_at": started, "finished_at": stamp(),
-                       "execution_status": "completed" if completed else "interrupted",
-                       "exit_code": process.returncode if completed else None}
+                       "execution_status": "completed" if completed else ("interrupted" if handshaken else "not_started"),
+                       "exit_code": process.returncode if process else None}
             save(record / "launcher.process.json", receipt)
     return receipt
 
@@ -277,6 +279,9 @@ class Executor:
                 command = [arg.replace(key, value) for arg in command]
             with self.boundary(outputs, [skills, view]) as sandbox:
                 receipt = sandbox.run(command, operation / "practice.log")
+            if self.state["config"].get("stop_on_recurrence"):
+                require(receipt["execution_status"] == "completed" and receipt["exit_code"] == 0,
+                        "Official practice command failed; stop_on_recurrence is enabled")
             evidence = [operation / "practice.process.json", operation / "practice.log"]
         else:
             prompt = (f"Apply the frozen skills under {skills} to the public task at {view}/public. "
@@ -284,7 +289,8 @@ class Executor:
                       f"under {outputs}. This is the official practice execution. Skills and research are read-only; "
                       "do not revise them or patch results from an earlier run. Report limitations honestly.")
             with self.boundary(outputs, [work, skills, view, self.scratch(identity)]) as sandbox:
-                receipt = launch(self.config, sandbox, work, view, identity, prompt, self.runtime, self.deadline,
+                config = {**self.config, "stop_on_tool_failure": self.state["config"].get("stop_on_recurrence", False)}
+                receipt = launch(config, sandbox, work, view, identity, prompt, self.runtime, self.deadline,
                                  operation / "execution", ready)
             command = receipt["argv"]
             evidence = [operation / "execution/launcher.process.json", operation / "execution/messages.jsonl"]
@@ -379,13 +385,14 @@ def stop(out, state):
     config = settings(state)
     (out / "STOP").write_text(stamp() + "\n")
     control = out / ".executor" / "containers"
-    for record in control.glob("openskill-*.json"):
-        data = read_json(record)
-        stop_container(config["docker"], control, data["container"])
+    with launch_lock(control):
+        for record in control.glob("openskill-*.json"):
+            data = read_json(record)
+            stop_container(config["docker"], control, data["container"])
     return {"stopped": True, "fence": str(out / "STOP")}
 
 
-def preflight(out, request):
+def preflight(out, request, full=False):
     """Check every declared construction image without a journal, role or model call."""
     config = settings({"config": request})
     require(config.get("sanitized_image") is True, "Review and attest the construction images first")
@@ -395,9 +402,16 @@ def preflight(out, request):
     require(not report.exists(), "Never overwrite a preflight; use a fresh directory")
     strings(request["case_ids"], "construction cases")
     result = {"started_at": stamp(), "status": "running", "docker": config["docker"],
-              "cases": [], "model_requests": 0}
+              "cases": [], "model_requests": 0, "scope": "runtime_and_environments" if full else "environments"}
     save(report, result)
     try:
+        if full:
+            result["runtime"] = check_runtime(out, request, session=True)
+            if config.get("runtime_manifest"):
+                manifest = read_json(Path(config["runtime_manifest"]))
+                require(manifest["runtime_fingerprint"] == result["runtime"]["fingerprint"],
+                        "Prepared runtime manifest does not match the configured SDK")
+            save(report, result)
         for case_id in request["case_ids"]:
             identifier(case_id)
             case_config = {**config, "image": config.get("case_images", {}).get(case_id, config["image"])}
@@ -426,10 +440,24 @@ def preflight(out, request):
     return result
 
 
+def fail_experiment(out, state, error):
+    """Preserve the first failure and fence the entire experiment before cleanup."""
+    record = out / ".executor" / "failure.json"
+    if not record.exists():
+        save(record, {"at": stamp(), "error_type": type(error).__name__, "error": str(error)})
+    return stop(out, state)
+
+
 def run(command, out, request=None):
     out = Path(out).resolve()
     if command in ("status", "next"):
-        return experiment.run(command, out)
+        result = experiment.run(command, out)
+        result["stopped"] = (out / "STOP").exists()
+        if result["stopped"] and command == "next":
+            result["next_action"] = "stopped"
+            for case in result["cases"].values():
+                case["next_action"] = "stopped"
+        return result
     if command == "stop":
         state = (experiment.run("status", out) if (out / "journal").exists() else
                  {"config": {"execution_mode": MODE, "executor": {"docker": read_json(out / "preflight.json")["docker"]}}})
@@ -448,7 +476,8 @@ def run(command, out, request=None):
             require(config.get("sanitized_image") is True, "Review and attest the image contains no graders, solutions or prior skills")
             require(config.get("practice_mode", "agent") in ("agent", "command"), "Invalid practice_mode")
             require(not (out / "STOP").exists(), "Never reuse a stopped experiment")
-            preflight(out, request)
+            require(type(request.get("stop_on_recurrence", False)) is bool, "stop_on_recurrence must be boolean")
+            preflight(out, request, full=True)
             return experiment.run("init", out, request, executor=True)
         state = experiment.run("status", out)
         settings(state)
@@ -468,11 +497,28 @@ def run(command, out, request=None):
             if (out / "STOP").exists():
                 require(request["action"] in ("feedback", "finish-case", "search-result"), "Stopped experiment cannot restart")
             return event(out, **request)
-        worker = Executor(out, request["case_id"])
-        if command == "creator":
-            return worker.creator(request)
-        if command == "verifier":
-            return worker.verifier(request)
+        if command in ("creator", "verifier"):
+            require(not (out / "STOP").exists(), "Stopped experiment cannot restart")
+            try:
+                ready = read_json(out / "preflight.json")
+                require(ready.get("runtime", {}).get("fingerprint"),
+                        "This executor requires a runtime-checked init; resume old runs with their recorded Skill")
+                check_runtime(out, state["config"], expected=ready["runtime"]["fingerprint"])
+            except BaseException as error:
+                fail_experiment(out, state, error)
+                raise
+            try:
+                worker = Executor(out, request["case_id"])
+                result = worker.creator(request) if command == "creator" else worker.verifier(request)
+                if command == "verifier" and state["config"].get("stop_on_recurrence"):
+                    attempt = result["cases"][request["case_id"]]["attempts"][-1]
+                    require(attempt["execution_status"] == "completed" and attempt["result"]["status"] == "ok",
+                            "Verification produced no valid measurement; stop_on_recurrence is enabled")
+                return result
+            except BaseException as error:
+                if state["config"].get("stop_on_recurrence"):
+                    fail_experiment(out, state, error)
+                raise
         raise ValueError("Unknown executor operation")
 
 

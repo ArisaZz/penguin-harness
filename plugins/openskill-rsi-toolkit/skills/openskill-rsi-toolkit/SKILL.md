@@ -1,7 +1,7 @@
 ---
 name: openskill-rsi-toolkit
 description: Run OpenSkill (Open-World Self-Evolution for LLM Agents, Yan et al. 2026). Retrieve domain knowledge and verification anchors, refine skills using independent virtual tests without target supervision, freeze the last revision, then evaluate the Target on its Benchmark.
-version: 2026.10.16.3
+version: 2026.10.16.4
 ---
 
 # OpenSkill
@@ -45,7 +45,14 @@ Use a unique timestamp and Target id for `experiment_id`. Validate ids and canon
 
 Read `references/executor.md` and `references/execution.md`; initialize a new `isolated-v1` journal through `scripts/executor.py` before construction. All mutations go through that executor. Do not substitute unrestricted subagents or a shared practice container for construction roles. Record actual runtime, installed Skill hash, baseline snapshot and declared budgets; use JSON serialization rather than handwritten YAML. The journal tracks phases, creator identity, revisions, attempts, recovery evidence, searches and final-versus-tested hashes. Use `status` when resuming and the read-only `next` command before dispatch or waiting; its deadline and remaining seconds govern scheduling. This version creates schema-2 journals for new runs. Resume older runs with their recorded Skill version; do not migrate or overwrite previous experiments, installed skills or snapshots. New isolated runs cannot accept hand-written role receipts through the legacy helper. Use `executor.py stop` for cancellation and `recover` after a host crash; neither silently reruns work.
 
-Initialization preflights every construction image before creating a journal or calling a model.
+Initialization imports the configured host SDK, checks its interfaces and creates/disposes a
+temporary Session without a model turn, then preflights every construction image before
+creating a journal. Deploy a complete runtime from one source revision and lockfile using
+`scripts/prepare_runtime.py`; see `references/executor.md`. Never overlay new SDK build files
+on an older installation. Each role checks the runtime fingerprint recorded at initialization.
+When the user requests termination on recurring execution failures, set `stop_on_recurrence:
+true`; the executor fences the experiment on failed role execution or an unmeasured verifier.
+Completed virtual assertion failures remain eligible for normal refinement.
 For GDPevo, select `executor.startup_profile: gdpevo` as described in `references/executor.md`.
 It starts the private service as its owner and checks business readiness and role isolation.
 A failed preflight fences that directory; preserve its evidence and start a new run only after

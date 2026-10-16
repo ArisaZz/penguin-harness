@@ -80,6 +80,15 @@ class CleanupFailed(RuntimeError):
     pass
 
 
+@contextmanager
+def launch_lock(control):
+    """Serialize container creation with STOP's final inventory and removal."""
+    control.mkdir(parents=True, exist_ok=True)
+    with (control / ".launch.lock").open("a") as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        yield
+
+
 def capture(argv, timeout=3, limit=65536):
     """Bound diagnostic duration and bytes, even for an arbitrarily long log line."""
     data = {"stdout": bytearray(), "stderr": bytearray()}
@@ -155,6 +164,7 @@ class Boundary:
         image = self.config["image"]
         require(image.startswith("sha256:") and len(image) == 71, "Pin the local sanitized image by its sha256 id")
         inspected = json.loads(self.docker_call(["image", "inspect", image]).stdout)[0]
+        self.check()
         require(inspected["Id"] == image, "Image identity changed")
         profile = self.config.get("startup_profile")
         require(profile in (None, "gdpevo"), "Unknown startup_profile")
@@ -171,10 +181,9 @@ class Boundary:
             raise ValueError("GDPevo images require startup_profile: gdpevo")
         timeout = self.config.get("startup_timeout_seconds", 120)
         require(type(timeout) in (int, float) and 0 < timeout <= 300, "Invalid startup timeout")
-        # Record before creation: stop/recovery can remove a container after a host crash.
-        save(self.record, {"container": self.name, "status": "starting", "image": image,
+        record = {"container": self.name, "status": "starting", "image": image,
                            "work": str(self.work), "readonly": list(map(str, self.readonly)),
-                           "startup_profile": profile, "started_at": stamp()})
+                           "startup_profile": profile, "started_at": stamp()}
         args = ["run", "--detach", "--name", self.name, "--label", "openskill.control=" + str(self.control),
                 "--network", "none", "--ipc", "private", "--cap-drop", "ALL",
                 "--cap-add", "CHOWN", "--cap-add", "SETUID", "--cap-add", "SETGID",
@@ -190,15 +199,17 @@ class Boundary:
             bootstrap = Path(__file__).with_name("gdpevo_start.py").resolve()
             args += ["--mount", f"type=bind,src={bootstrap},dst=/opt/openskill-startup.py,readonly",
                      "--entrypoint", "/usr/local/bin/python3", image, "/opt/openskill-startup.py", "serve"]
-            record = json.loads(self.record.read_text())
             record["bootstrap_sha256"] = hashlib.sha256(bootstrap.read_bytes()).hexdigest()
-            save(self.record, record)
         elif self.config.get("entrypoint"):
             args += ["--entrypoint", self.config["entrypoint"]]
         if profile != "gdpevo":
             args += [image, *self.config.get("command", [])]
         try:
-            self.docker_call(args)
+            with launch_lock(self.control):
+                self.check()
+                # STOP cannot finish its inventory between this record and creation.
+                save(self.record, record)
+                self.docker_call(args)
             # Verify the real SDK worker identity, effective privileges and mount permissions.
             check = ("const fs=require('fs');const p=require('path');"
                      f"if(process.getuid()!=={self.uid}||process.getgid()!=={self.gid})throw Error('Role identity changed');"
@@ -235,7 +246,7 @@ class Boundary:
             return self
         except BaseException as error:
             try:
-                record = json.loads(self.record.read_text())
+                record = json.loads(self.record.read_text()) if self.record.exists() else record
                 record["startup_error"] = {"type": type(error).__name__, "message": str(error)[-4000:],
                     "stderr": str(getattr(error, "stderr", "") or "")[-65536:]}
                 save(self.record, record)

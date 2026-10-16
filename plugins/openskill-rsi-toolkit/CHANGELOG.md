@@ -1,5 +1,34 @@
 # OpenSkill changes
 
+## 2026.10.16.4
+
+New experiments validate the actual host SDK and configured Session before construction,
+then check a runtime fingerprint before each role. A source-archive helper installs and
+builds a complete runtime from one commit and frozen lockfile in a fresh directory. This
+prevents the observed new-SDK/old-dependency deployment from reaching a creator launch.
+The optional `stop_on_recurrence` policy now belongs to the executor: execution failures
+stop the batch, while completed virtual assertion failures retain the refinement protocol.
+Launcher diagnostics preserve the failure stage and actual process exit code.
+Failed official practice cannot register a revision merely because it left output files.
+Stopped runs report stopped guidance; container creation is serialized with cancellation.
+
+新实验在构建前检查真实宿主机 SDK 和配置的会话，并在每次角色启动前核对运行环境指纹。
+新增部署脚本从固定提交的源码归档和锁文件，在新目录安装、构建完整运行环境，提前拦截
+新版 SDK 与旧依赖混用的问题。`stop_on_recurrence` 可选策略由执行器直接执行：执行故障
+停止整批实验，已完成的虚拟断言失败继续遵循修订协议。启动诊断保留失败阶段和真实退出码。
+正式练习即使留下输出文件，也不能在执行失败后登记修订。停止状态会反映在下一步指引中，
+容器创建与取消操作使用同一把锁，防止停止返回后又启动容器。
+
+No model call is made by the runtime probe. Session resumption is tested with the scripted
+provider, because an unused Session has no resumable Trace. Existing experiments retain their
+recorded Skill version; stopped runs are not resumed or rewritten. Algorithm budgets, role
+isolation, final-revision selection and post-freeze evaluation are unchanged. Source changes
+are confined to this plugin.
+
+运行环境预检不调用模型。空会话没有可恢复的 Trace，因此会话恢复能力由模拟模型测试验证。
+旧实验保留其记录的 Skill 版本，停止的实验不恢复、不重写。算法预算、角色隔离、最后版本
+选择及冻结后评测规则保持原样。源码改动仅限本插件。
+
 ## 2026.10.16.3
 
 GDPevo construction can use a plugin-owned startup adapter: the service opens its private

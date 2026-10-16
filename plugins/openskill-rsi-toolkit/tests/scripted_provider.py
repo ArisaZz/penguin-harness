@@ -11,6 +11,7 @@ class Provider(BaseHTTPRequestHandler):
     requests = []
     verifier_tests = 1
     omit_suite = False
+    practice_exit_code = 0
 
     def log_message(self, *_):
         pass
@@ -48,7 +49,8 @@ class Provider(BaseHTTPRequestHandler):
                 rows = "rows" if "Include every row" in latest else "rows[:-1]"
                 write(root + "/skills/calculate/scripts/total.py",
                       "import json,sys\nfrom pathlib import Path\nrows=json.loads(Path(sys.argv[1]).read_text())\n"
-                      f"Path(sys.argv[2]).write_text(str(sum({rows})))\n")
+                      f"Path(sys.argv[2]).write_text(str(sum({rows})))\n"
+                      f"raise SystemExit({type(self).practice_exit_code})\n")
                 write(root + "/practice.json", json.dumps({"argv": ["python3", "${SKILLS}/calculate/scripts/total.py",
                       "${INPUTS}/rows.json", "${OUTPUTS}/total.txt"]}))
             else:

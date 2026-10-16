@@ -44,6 +44,41 @@ prove semantic independence, verifier correctness or that a learned skill will g
 
 ## Initialize
 
+### Prepare the host runtime
+
+Use one pinned source revision for the SDK package metadata, dependencies and build outputs.
+On the source checkout, create a git archive of the recorded commit. Transfer that archive
+to the execution host and verify its SHA-256, then run the plugin's helper on that host:
+
+```bash
+python3 "<skill_dir>/scripts/prepare_runtime.py" "<source.tar>" "<fresh_runtime_dir>" \
+  --revision "<40-character commit>" --sha256 "<archive SHA-256>" \
+  --node "<absolute Node 24+ binary>" --pnpm "<absolute pnpm bin/pnpm.cjs>"
+```
+
+The helper requires the source's exact `packageManager` version, installs with its frozen
+lockfile, builds core, and imports the resulting SDK. It refuses existing destinations and
+archives with inherited dependencies or build outputs. Failed directories have no successful
+runtime manifest; preserve their build logs and use a fresh destination after fixing the cause.
+It does not install Node or pnpm. No Project credentials belong in the source archive.
+
+Set `executor.sdk` to the resulting `source/packages/core/dist/index.js` and optionally set
+`executor.runtime_manifest` to its `runtime-manifest.json` for a provenance consistency check.
+Do not copy only `dist` into an older CLI installation or rely on a matching package version
+number. Keep the runtime directory unchanged for the experiment. Runtime checks fingerprint
+the Node binary, core dist, package metadata and direct dependency metadata; this detects
+deployment changes, not arbitrary tampering with every transitive dependency file.
+
+`init` uses the configured Node to import the actual SDK and verify its required interfaces.
+It creates and disposes a temporary Agent/Session with the configured construction model,
+without `session.run`, model requests or task inputs. A never-run Session has no resumable
+Trace; session resumption is checked separately by the real-SDK/scripted-provider integration
+test. The temporary Agent is removed even on probe failure. Each role repeats the import and
+fingerprint check before dispatch. Probe errors, timeouts and changed runtime bytes stop the
+experiment. Configuration validation does not prove remote API reachability, quota or access.
+
+### Configure and initialize
+
 Use the existing configuration in `execution.md`, adding:
 
 ```json
@@ -77,7 +112,7 @@ python3 "<skill_dir>/scripts/executor.py" init "<OUT>" "<config.json>"
 python3 "<skill_dir>/scripts/executor.py" event "<OUT>" "<start-case.json>"
 ```
 
-`init` checks every declared construction Case's pinned image before creating the journal.
+`init` checks the host runtime and every declared construction Case's pinned image before creating the journal.
 It makes no model requests and does not start construction clocks. All images must pass;
 the first failure stops the batch, writes `preflight.json` and `STOP`, and cleans up its
 container. Do not reuse that directory. Existing runs remain on their recorded Skill version.
@@ -92,6 +127,10 @@ This uses the same `execution_mode`, `case_ids` and `executor` image/runtime set
 Use a different fresh OUT for the later `init`; it repeats the checks. SIGTERM or
 `executor.py stop <CHECK_DIR>` cancels a standalone preflight and cleans up, including
 when no journal has been created yet.
+
+The standalone command reports `scope: environments`; it does not require or validate a
+configured SDK/Project. Full `init` reports `scope: runtime_and_environments`. An environment-only
+pass is insufficient to launch construction.
 
 ### GDPevo business services
 
@@ -226,13 +265,28 @@ different role. It does not invent a recovery decision or silently change an exp
 
 ## Stop, recovery and final freeze
 
+When the user requests stopping the entire experiment on execution faults, set the top-level
+configuration `stop_on_recurrence: true` before `init`. A failed creator operation or verifier
+without a valid completed measurement saves `.executor/failure.json`, sets permanent `STOP`,
+cleans up this experiment's containers and returns failure. A completed pytest assertion
+failure follows the usual feedback/refinement rules. Runtime failures always fence the run.
+Official command practice must exit zero before outputs can be imported. During official
+agent practice, a final SDK tool result marked `fatal` or `aborted` ends the role before
+another model request; files left by the failed operation are retained only as diagnostics.
+Author exploration is separate from official practice and keeps its normal recovery behavior.
+Without this option, the existing documented verifier-repair protocol remains available.
+Launcher receipts distinguish failure before handshake from an interrupted model turn and
+retain the real child exit code; `result.json` identifies the failing launch stage.
+
 ```bash
 python3 "<skill_dir>/scripts/executor.py" stop "<OUT>"
 python3 "<skill_dir>/scripts/executor.py" recover "<OUT>"
 ```
 
 `stop` sets a permanent fence and removes only this experiment's labelled containers. The
-running launcher aborts its model stream and disposes command sessions. Deadline expiry
+creation transaction shares a lock with stop, so no container can start after stop returns.
+`next` reports `stopped`, and further role dispatch is refused before even probing the SDK.
+The running launcher aborts its model stream and disposes command sessions. Deadline expiry
 and SIGTERM also stop workers. A cleanup that cannot be confirmed leaves a STOP fence and
 cannot seal a verification as completed. Check the command's exit code; a requested stop
 is not proof of shutdown when Docker itself is unavailable.

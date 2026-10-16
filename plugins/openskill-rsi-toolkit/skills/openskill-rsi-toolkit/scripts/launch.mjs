@@ -76,9 +76,11 @@ async function writeOnce(file, text) {
   }
 }
 
+let stage = "sdk_import";
 async function main(file) {
   const config = JSON.parse(await fs.readFile(file, "utf8"));
   const sdk = await import(pathToFileURL(config.sdk).href);
+  stage = "agent_setup";
   if (!/^openskill_[a-f0-9]{32}$/.test(config.agent_id))
     throw new Error("Dedicated agent id required");
   const state = path.join(
@@ -100,6 +102,7 @@ async function main(file) {
     proxyEnv: () => null,
     controlEnv: () => ({}),
   });
+  stage = "session_setup";
   const session = config.session_id
     ? await agent.resumeSession({ sessionId: config.session_id })
     : await agent.createSession({
@@ -130,6 +133,7 @@ async function main(file) {
     process.stdin.pause();
     if (go !== "go" || abort.signal.aborted)
       throw new Error("Launch was not authorized before deadline");
+    stage = "model_turn";
     const iterator = session.run([sdk.userText(config.prompt)], {
       approve: async () => "allow",
       signal: abort.signal,
@@ -142,6 +146,18 @@ async function main(file) {
         break;
       }
       await log.write(JSON.stringify(next.value) + "\n");
+      const output = next.value.type === "model_msg" ? next.value.payload : null;
+      if (
+        config.stop_on_tool_failure &&
+        output?.type === "tool_call_output" &&
+        ["fatal", "aborted"].includes(output.stop_reason)
+      ) {
+        abort.abort();
+        await iterator.return();
+        const error = new Error(`Official practice tool failed: ${output.tool_call_id}`);
+        error.code = "PRACTICE_TOOL_FAILED";
+        throw error;
+      }
     }
     if (abort.signal.aborted || cutoff)
       throw new Error(`Role did not complete: ${JSON.stringify(cutoff)}`);
@@ -159,8 +175,27 @@ async function main(file) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  main(process.argv[2]).catch((error) => {
-    console.error(error.message);
+  main(process.argv[2]).catch(async (error) => {
+    const message =
+      stage === "session_setup"
+        ? "Session setup failed; check the configured model privately"
+        : error.message;
+    try {
+      const config = JSON.parse(await fs.readFile(process.argv[2], "utf8"));
+      await fs.writeFile(
+        config.result,
+        JSON.stringify({
+          completed: false,
+          stage,
+          error_code: error.code ?? error.name,
+          error: message,
+        }),
+        { flag: "wx", mode: 0o600 },
+      );
+    } catch {
+      /* Preserve launcher stderr even if its result path is unavailable. */
+    }
+    console.error(`${stage}: ${message}`);
     process.exitCode = 1;
   });
 }
