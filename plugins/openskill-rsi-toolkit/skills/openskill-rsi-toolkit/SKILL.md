@@ -1,7 +1,7 @@
 ---
 name: openskill-rsi-toolkit
 description: Run OpenSkill (Open-World Self-Evolution for LLM Agents, Yan et al. 2026). Retrieve domain knowledge and verification anchors, refine skills using independent virtual tests without target supervision, freeze the last revision, then evaluate the Target on its Benchmark.
-version: 2026.10.16.2
+version: 2026.10.16.3
 ---
 
 # OpenSkill
@@ -44,6 +44,12 @@ OUT          = PROJECT_DIR/agents/<controller_agent_id>/scratchpad/<session_id>/
 Use a unique timestamp and Target id for `experiment_id`. Validate ids and canonical paths; reject traversal and symlink escapes. Never read vaults, `.project_config.toml`, API tokens or `web.db`. Keep research, verifier scripts, practice outputs and diagnostics in OUT, outside the Target's State and the Benchmark. Only the controller publishes State and appends final evaluations.
 
 Read `references/executor.md` and `references/execution.md`; initialize a new `isolated-v1` journal through `scripts/executor.py` before construction. All mutations go through that executor. Do not substitute unrestricted subagents or a shared practice container for construction roles. Record actual runtime, installed Skill hash, baseline snapshot and declared budgets; use JSON serialization rather than handwritten YAML. The journal tracks phases, creator identity, revisions, attempts, recovery evidence, searches and final-versus-tested hashes. Use `status` when resuming and the read-only `next` command before dispatch or waiting; its deadline and remaining seconds govern scheduling. This version creates schema-2 journals for new runs. Resume older runs with their recorded Skill version; do not migrate or overwrite previous experiments, installed skills or snapshots. New isolated runs cannot accept hand-written role receipts through the legacy helper. Use `executor.py stop` for cancellation and `recover` after a host crash; neither silently reruns work.
+
+Initialization preflights every construction image before creating a journal or calling a model.
+For GDPevo, select `executor.startup_profile: gdpevo` as described in `references/executor.md`.
+It starts the private service as its owner and checks business readiness and role isolation.
+A failed preflight fences that directory; preserve its evidence and start a new run only after
+resolving the failure. Each subsequent role and measurement repeats its readiness checks.
 
 Keep each Case's allowlisted input manifest, raw and sanitized queries, source URLs and retrieval dates, `knowledge.md`, `plan.yaml`, `verification-knowledge.md`, role requests/replies and diagnostics under `OUT/tasks/<case_id>/`. Keep every practice output and test attempt in a distinct directory. Historical revisions are audit records, never candidates for score-based selection. The executor confines role file and command tools and controls measured execution. The controller still reviews source content, output allowlists and feedback: isolation does not prove semantic independence or test correctness. See `references/executor.md` for the trust boundary and supported environments.
 

@@ -77,6 +77,51 @@ python3 "<skill_dir>/scripts/executor.py" init "<OUT>" "<config.json>"
 python3 "<skill_dir>/scripts/executor.py" event "<OUT>" "<start-case.json>"
 ```
 
+`init` checks every declared construction Case's pinned image before creating the journal.
+It makes no model requests and does not start construction clocks. All images must pass;
+the first failure stops the batch, writes `preflight.json` and `STOP`, and cleans up its
+container. Do not reuse that directory. Existing runs remain on their recorded Skill version.
+
+To check environments separately, without a configured model or creating a journal, run:
+
+```bash
+python3 "<skill_dir>/scripts/executor.py" preflight "<fresh_CHECK_DIR>" "<config.json>"
+```
+
+This uses the same `execution_mode`, `case_ids` and `executor` image/runtime settings.
+Use a different fresh OUT for the later `init`; it repeats the checks. SIGTERM or
+`executor.py stop <CHECK_DIR>` cancels a standalone preflight and cleans up, including
+when no journal has been created yet.
+
+### GDPevo business services
+
+Set `executor.startup_profile` to `gdpevo` for the reviewed GDPevo practice images. Omit
+`entrypoint` and `command` with this profile. The executor mounts the plugin's
+`gdpevo_start.py` read-only and records its digest. The image's service directory, command,
+port and health path come from its reviewed `GDPEVO_*` configuration. No benchmark checkout
+or generated Dockerfile needs editing. Images retaining the normal GDPevo entrypoint are
+refused unless this profile is selected.
+
+The trusted supervisor starts the service as `taskenv`, which opens its own private log
+after changing identity. The service receives `TASK_ENV_ENABLE_JUDGE=0`; its data and API
+semantics are unchanged. Startup does not restore DAC_OVERRIDE, KILL or privileged mode.
+The ordinary role uid/gid must differ from `taskenv`; it must have no taskenv group access.
+
+Before each role or official measurement, the executor checks the non-root SDK worker,
+zero effective capabilities, no-new-privileges, writable outputs and read-only input mounts.
+With the GDPevo profile it also waits for the health API, confirms the role cannot list the
+private service directory, and requires HTTP 404 from an empty judge request. That request
+contains no candidate answer. The image review is still required; these probes do not audit
+all routes or replace removal of grading assets. `startup_timeout_seconds` defaults to 120,
+is limited to 300, and is bounded by the active Case deadline during construction.
+
+`preflight.json` records the batch outcome. Container records under `.executor/containers/`
+record readiness, the bootstrap hash and probe outcomes. Before removing a container, the
+executor attempts to save its state, exit/OOM information and bounded logs under that
+directory's `diagnostics/`. It saves command stderr on startup errors. Log collection is
+limited to three seconds and 64 KiB per stream per command, and cannot block mandatory
+cleanup on failure. These private diagnostics never enter creator/verifier views or skills.
+
 `start-case.json` is `{"action":"start-case","case_id":"CASE-001"}`. Start the clock before
 research. Then retrieve and stage public files under `OUT/tasks/CASE-001/inputs/public/`,
 domain knowledge under `inputs/knowledge/` and independent anchors under `inputs/anchors/`.

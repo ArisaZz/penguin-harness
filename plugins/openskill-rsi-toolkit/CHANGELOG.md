@@ -1,5 +1,26 @@
 # OpenSkill changes
 
+## 2026.10.16.3
+
+GDPevo construction can use a plugin-owned startup adapter: the service opens its private
+log as `taskenv`, without restoring broad container privileges. Initialization preflights
+every construction image before creating a journal or calling a model. Each role and
+measurement checks identity, mount permissions and, for GDPevo, business API readiness,
+private-directory denial and a disabled judge. Failed startup preserves bounded diagnostics
+before container removal and prevents the batch from starting construction.
+
+The refinement protocol and final evaluation reference are unchanged. Old experiments stay
+on their recorded Skill version; stopped directories are preserved. This is an environment
+execution fix and provides no new benchmark score.
+
+GDPevo 构建可使用插件内的启动适配器：业务服务以 `taskenv` 身份打开自己的私有日志，
+保留收紧后的容器权限。初始化在创建实验日志或调用模型前检查所有构建镜像。每次角色
+和测量执行都检查身份与挂载权限；GDPevo 还检查业务 API 就绪、私有目录不可读和 judge
+关闭。启动失败时先保存有大小与时间上限的诊断信息，再清理容器，并阻止整批构建启动。
+
+修订协议与最终评估参考保持原样。旧实验继续使用其记录的 Skill 版本，已停止的目录予以
+保留。本次修复解决环境执行问题，不提供新的 benchmark 分数。源码改动仅限本插件。
+
 ## 2026.10.16.2
 
 New experiments use a dedicated executor and isolated SDK role launcher. Creator and verifier

@@ -1,6 +1,6 @@
 """Execute OpenSkill construction through isolated roles; never launch target scoring.
 
-Usage: executor.py init|event|creator|verifier OUT REQUEST.json
+Usage: executor.py preflight|init|event|creator|verifier OUT REQUEST.json
        executor.py status|next|stop|recover OUT
 The trusted controller owns retrieval, semantic review and final deployment. Workers
 cannot mutate this journal. One executor operation owns OUT at a time.
@@ -17,6 +17,7 @@ import subprocess
 import sys
 import uuid
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Installed Skill bytes are versioned artifacts; do not add Python cache files there.
@@ -384,13 +385,58 @@ def stop(out, state):
     return {"stopped": True, "fence": str(out / "STOP")}
 
 
+def preflight(out, request):
+    """Check every declared construction image without a journal, role or model call."""
+    config = settings({"config": request})
+    require(config.get("sanitized_image") is True, "Review and attest the construction images first")
+    require(not (out / "STOP").exists() and not (out / "journal").exists(),
+            "Preflight requires a fresh directory, not an existing or stopped experiment")
+    report = out / "preflight.json"
+    require(not report.exists(), "Never overwrite a preflight; use a fresh directory")
+    strings(request["case_ids"], "construction cases")
+    result = {"started_at": stamp(), "status": "running", "docker": config["docker"],
+              "cases": [], "model_requests": 0}
+    save(report, result)
+    try:
+        for case_id in request["case_ids"]:
+            identifier(case_id)
+            case_config = {**config, "image": config.get("case_images", {}).get(case_id, config["image"])}
+            work = out / ".executor" / "preflight" / case_id
+            work.mkdir(parents=True, exist_ok=False)
+            deadline = (datetime.now(timezone.utc) + timedelta(seconds=330)).isoformat()
+            boundary = Boundary(case_config, out / ".executor/containers", work, [], deadline, out / "STOP")
+            row = {"case_id": case_id, "image": case_config["image"], "status": "checking",
+                   "container_record": relative(out, boundary.record)}
+            result["cases"].append(row)
+            save(report, result)
+            with boundary:
+                row["status"] = "ready"
+            row["cleanup_confirmed"] = True
+            save(report, result)
+        result["status"] = "ready"
+    except BaseException as error:
+        result.update(status="failed", error=f"{type(error).__name__}: {error}")
+        if result["cases"]:
+            result["cases"][-1]["status"] = "failed"
+        (out / "STOP").write_text("Environment preflight failed; no construction may start.\n")
+        raise
+    finally:
+        result["finished_at"] = stamp()
+        save(report, result)
+    return result
+
+
 def run(command, out, request=None):
     out = Path(out).resolve()
     if command in ("status", "next"):
         return experiment.run(command, out)
     if command == "stop":
-        return stop(out, experiment.run("status", out))
+        state = (experiment.run("status", out) if (out / "journal").exists() else
+                 {"config": {"execution_mode": MODE, "executor": {"docker": read_json(out / "preflight.json")["docker"]}}})
+        return stop(out, state)
     with lock(out):
+        if command == "preflight":
+            return preflight(out, request)
         if command == "init":
             require(request.get("execution_mode") == MODE, "Set execution_mode to isolated-v1")
             config = settings({"config": request})
@@ -402,6 +448,7 @@ def run(command, out, request=None):
             require(config.get("sanitized_image") is True, "Review and attest the image contains no graders, solutions or prior skills")
             require(config.get("practice_mode", "agent") in ("agent", "command"), "Invalid practice_mode")
             require(not (out / "STOP").exists(), "Never reuse a stopped experiment")
+            preflight(out, request)
             return experiment.run("init", out, request, executor=True)
         state = experiment.run("status", out)
         settings(state)
@@ -434,7 +481,7 @@ def main():
         raise KeyboardInterrupt("Executor received a termination signal")
     signal.signal(signal.SIGTERM, cancelled)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["init", "event", "creator", "verifier", "status", "next", "stop", "recover"])
+    parser.add_argument("command", choices=["preflight", "init", "event", "creator", "verifier", "status", "next", "stop", "recover"])
     parser.add_argument("out", type=Path)
     parser.add_argument("request", nargs="?", type=Path)
     args = parser.parse_args()

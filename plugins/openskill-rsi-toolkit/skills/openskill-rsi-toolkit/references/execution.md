@@ -44,6 +44,11 @@ environment versions, isolation actually enforced, additional budgets and declar
 adaptations as configuration fields. `practice_prefixes` lists this experiment's container
 mount roots; the helper also rejects `/opt/openskill-skills` and OUT paths in deployable text.
 
+The executor preflights all construction images before journal initialization; see
+`executor.md` for GDPevo startup configuration and the standalone `preflight` command.
+Preflight is infrastructure validation, with no practice, verification attempt or model call.
+After `start-case`, every role's startup time remains part of that Case's existing deadline.
+
 With `test_benchmark_id`, use a distinct published Benchmark and declare its Case ids from
 metadata only. Do not read its statements, inputs, rubric or traces during construction.
 Only construction Cases reach creators and verifiers. The final evaluation plan targets

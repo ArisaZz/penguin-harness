@@ -13,6 +13,8 @@ repairs its skill, a fresh verifier measures it, and the final revision is the t
 Given too many parameterized tests, none execute and the failed attempt still spends budget.
 Given a verifier that supplies no suite, no score is inferred and a fresh attempt needs feedback.
 Given a controller mapping creator code as research, transfer is refused before a verifier sees it.
+Given a GDPevo service, every role and pytest starts only after business readiness.
+Given failed batch initialization, no model request or construction journal is created.
 """
 
 import json
@@ -185,6 +187,21 @@ class LoopTest(unittest.TestCase):
 
     def test_command_practice_repairs_skill_with_independent_verification(self):
         self.run_loop("command")
+
+    def test_gdpevo_service_supports_the_full_agent_refinement_loop(self):
+        self.config.pop("entrypoint")
+        self.config.pop("command")
+        self.config["startup_profile"] = "gdpevo"
+        self.run_loop("agent")
+
+    def test_failed_initialization_makes_no_model_request(self):
+        self.config["entrypoint"] = "/does-not-exist"
+        before = len(Provider.requests)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.create_run("agent")
+        self.assertEqual(len(Provider.requests), before)
+        self.assertFalse((self.base / "experiment/journal").exists())
+        self.assertTrue((self.base / "experiment/STOP").exists())
 
     def run_loop(self, mode):
         out, request = self.create_run(mode)
