@@ -816,6 +816,8 @@ importers:
 
   plugins/model-development: {}
 
+  plugins/openskill-rsi-toolkit: {}
+
   plugins/opro-rsi-toolkit: {}
 
   plugins/sandbox-bwrap:

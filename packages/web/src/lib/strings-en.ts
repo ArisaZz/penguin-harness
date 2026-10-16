@@ -4989,6 +4989,12 @@ Scenarios:
         p.provider && p.modelId
           ? `- provider: \`${p.provider}\`\n- model_id: \`${p.modelId}\`\n`
           : "";
+      const evaluationProtocol =
+        p.skill === "openskill-rsi-toolkit"
+          ? "During construction, use only independent virtual-test feedback; do not read Benchmark scores, rubrics or reference solutions, and do not run target evaluations. " +
+            "Only after all Cases' skills are frozen, measure the baseline and the frozen final State through the Skill's own evaluation reference; do not evaluate intermediate candidates or revise skills using target results. " +
+            "Keep the Test Agent's runtime fixed, record only complete target evaluations in `scoreboard.yaml` under the same label, and keep virtual-test results separate, "
+          : "Measure the baseline and every candidate through the Skill's own evaluation reference, keep the Test Agent's runtime fixed, record every complete evaluation in `scoreboard.yaml` under the same label, ";
       return (
         `Use the \`${p.skill}\` Skill to run its method on the Test Agent against its frozen Benchmark.\n\n` +
         `- test_agent_id: \`${p.targetAgentId}\`\n` +
@@ -4998,7 +5004,7 @@ Scenarios:
         "\n" +
         (pinned !== "" ? "Evaluate with exactly this provider and model. " : "") +
         "Run the method the way its paper does, at the Skill's smoke budget unless I set one above; ask me only for inputs the method requires and I have not given. " +
-        "Measure the baseline and every candidate through the Skill's own evaluation reference, keep the Test Agent's runtime fixed, record every complete evaluation in `scoreboard.yaml` under the same label, " +
+        evaluationProtocol +
         "and finish by reporting the baseline score, the final score, the retained version and what the method changed."
       );
     },

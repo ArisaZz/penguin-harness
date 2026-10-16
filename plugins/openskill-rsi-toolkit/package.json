@@ -1,0 +1,41 @@
+{
+  "name": "@penguinharness/openskill-rsi-toolkit",
+  "version": "0.2.13",
+  "description": "The OpenSkill RSI Toolkit: Open-World Self-Evolution for LLM Agents (Yan et al., 2026, https://arxiv.org/abs/2606.06741). Retrieve domain knowledge and independent verification anchors, refine skills with virtual tests, then freeze the last revision before target evaluation. Includes Target initialization and the Evaluation Center's evaluation protocol.",
+  "keywords": [
+    "penguin-plugin",
+    "penguinharness",
+    "skills"
+  ],
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "python3 -B -m unittest discover -s tests -v"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Prism-Shadow/penguin-harness.git",
+    "directory": "plugins/openskill-rsi-toolkit"
+  },
+  "files": [
+    "icon.svg",
+    "skills",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "penguin": {
+    "description_zh": "OpenSkill RSI 工具包：实现《Open-World Self-Evolution for LLM Agents》（Yan 等，2026，https://arxiv.org/abs/2606.06741）。检索领域知识与独立验证依据，用虚拟测试迭代技能，冻结最后版本后再进行目标评测。包含 Target 初始化流程与评估中心的评测协议。",
+    "short_description": "OpenSkill RSI Toolkit: learn skills through research and virtual tests.",
+    "short_description_zh": "OpenSkill RSI 工具包：通过检索与虚拟测试学习技能。",
+    "category": "rsi",
+    "icon": "icon.svg",
+    "quick_start": {
+      "prompt": "Use the `openskill-rsi-toolkit` Skill. Ask me for the Target agent and a published Benchmark if I have not supplied them. Use the smoke profile: research each task, build independent virtual tests, allow up to 3 failure-driven revisions, then freeze the last skills. Only after all skills are frozen, measure the baseline and final State once per Case. Keep Benchmark scores, rubrics and reference solutions out of skill construction.",
+      "prompt_zh": "使用 `openskill-rsi-toolkit` 技能；若我尚未提供，请先询问 Target 智能体和已发布的 Benchmark。使用冒烟配置：逐任务检索知识、构建独立虚拟测试，最多进行 3 次失败驱动的修订，然后冻结最后版本的技能。全部技能冻结后，再对基线和最终 State 的每道题各评测一次。技能构建阶段不得读取 Benchmark 分数、评分细则或参考答案。",
+      "skills": [
+        "openskill-rsi-toolkit"
+      ]
+    }
+  }
+}
