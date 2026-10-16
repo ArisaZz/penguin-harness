@@ -1,20 +1,20 @@
 # Recorded execution
 
-Use this reference for every new experiment. `scripts/experiment.py` records phase changes,
-practice revisions and verification attempts. It checks artifacts and budgets; it does not
-launch agents, provide a filesystem sandbox, prove a verifier's semantics or stop a running
-process at its deadline. The controller still isolates inputs, dispatches roles and aborts
-overdue work. Do not bypass a refused transition by editing the journal.
+For new experiments, use the isolated executor in [executor.md](executor.md). This reference
+specifies the journal schema and algorithmic transitions that executor uses internally.
+`scripts/experiment.py` remains the artifact/state validator; it does not launch or confine
+roles by itself. An `isolated-v1` journal accepts mutations only through `executor.py`.
+Legacy journals keep their recorded execution mode and are never migrated automatically.
 
 ## Initialize and resume
 
 Write a JSON configuration outside the journal, then run:
 
 ```bash
-python3 "<skill_dir>/scripts/experiment.py" init "<OUT>" "<config.json>"
+python3 "<skill_dir>/scripts/executor.py" init "<OUT>" "<config.json>"
 ```
 
-Configuration:
+Configuration (add the required `execution_mode` and `executor` fields from `executor.md`):
 
 ```json
 {
@@ -84,10 +84,13 @@ a new journal over them or retroactively mark their failed measurements valid.
 Write each request as a JSON file, and issue it with:
 
 ```bash
-python3 "<skill_dir>/scripts/experiment.py" event "<OUT>" "<request.json>"
+python3 "<skill_dir>/scripts/executor.py" event "<OUT>" "<request.json>"
 ```
 
-All Case events include `case_id`. Use these actions in order:
+All Case events include `case_id`. The table describes the underlying event schema. For
+isolated runs, `plan`, `revision`, `begin-verification` and `finish-verification` are private
+executor transitions: invoke `creator`/`verifier`, never submit these four events manually.
+Other events use `executor.py event`. The actions occur in this order:
 
 | Action | Additional fields | When |
 | --- | --- | --- |
@@ -108,7 +111,8 @@ outputs in a new `practice/revision-N/`, starting at 0; do not edit earlier outp
 and independent evidence to the intended change and expected behavior. The helper verifies
 that revisions come from the same creator and follow recorded virtual feedback, not target scores.
 
-Save an execution receipt under this Case, outside its sealed practice directories:
+The executor saves an execution receipt under this Case, outside its sealed practice directories.
+This is the stored format, not a request for the model to manufacture a receipt:
 
 ```json
 {
@@ -128,8 +132,9 @@ the shipped `artifacts.py` functions: `digest(tree(Path("<case>/skills")))`; imp
 the Skill's scripts directory. Save raw tool/process output, including failed execution.
 For a revised practice run, timestamps must follow its feedback; all practice execution must
 finish by the Case deadline. Collection may happen later if the execution already completed
-in time. The helper checks identities, hashes and timestamp ordering, not whether the claimed
-command really executed. The controller must check its tool trace against the receipt.
+in time. The validator checks identities, hashes and timestamp ordering. For isolated runs, the
+executor obtains these values from its subprocesses and SDK streams. Traces still need
+review to establish how the creator applied its skills; execution alone does not prove use.
 
 All `evidence` lists contain nonempty regular files inside OUT, using relative paths. The
 helper seals their bytes and checks them again at freeze. Use immutable copies of retrievals,

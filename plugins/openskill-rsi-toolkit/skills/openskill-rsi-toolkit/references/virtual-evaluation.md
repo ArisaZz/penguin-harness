@@ -4,7 +4,7 @@ This protocol implements the practice loop in OpenSkill §2.2.2 and Appendix B. 
 
 ## Creator
 
-The controller starts one background `run_subagent` session per Case and retains its `subagent_id`. Omit `agent_id`; record the construction runtime. A creator receives:
+The controller invokes `executor.py creator`. The executor retains the actual dedicated creator Agent and SDK Session identity and records the fixed construction runtime. A creator receives:
 
 ```text
 Role: OpenSkill creator. Work only in the assigned practice directories.
@@ -18,10 +18,11 @@ description and dated version. Follow the supplied skill-contract.md: describe
 applicability, parameters, output contracts, checks and limitations; include a
 contract.json with a stable id and every resource. Put reusable code in scripts/
 and cite references. Resolve resources relative to the skill, not a practice root.
-Execute the task using those skills and the allowed inputs. Generate outputs by
-running the procedures, rather than embedding this task's answer in a Skill.
-Return the skill and output paths, revision hash, commands actually executed,
-start/end timestamps, exit code and raw execution-log paths for the receipt.
+Draft skills in the authoring turn. When the executor resumes you for practice,
+read and apply the frozen skills to the allowed inputs. Generate outputs by
+running the procedures; do not embed this task's answer in a Skill.
+Return output paths and limitations. The executor records actual tool/process
+execution, hashes and timestamps; do not manufacture an execution receipt.
 Do not read target scores, tests, rubrics, solutions, old traces or other Cases.
 Do not spawn subagents or change the Target Agent State. Await controller feedback
 before making another revision.
@@ -29,11 +30,11 @@ before making another revision.
 
 The actual task input is permitted during practice, as in the source. "Virtual" describes the independently generated verifier and its supervision, not a requirement to invent unrelated user tasks. Small synthetic inputs and documented examples can add checks when they exercise the same skills. Keep these checks grounded and record that coverage.
 
-On each revision, resume the same creator with `input_subagent`. Supply the recorded feedback, structured virtual failures and any gap research. Keep the planned skill count fixed. The creator fixes skills/scripts and re-executes in a clean output directory or restores the input environment first. Use `practice/revision-N/` and register `revision` with an execution receipt as `execution.md` describes. The helper preserves each skill revision and hashes its outputs before another attempt. Outputs must come from the recorded skill revision; stale files cannot satisfy a later test. State the proposed correction and observable behavior expected from it, then check that prediction in the next allowed verification. Skill repair must change reusable content. An execution/delivery repair with unchanged skills is `repeat_practice` and counts only as another practice execution.
+On each revision, invoke `executor.py creator` again; it resumes the same recorded SDK Session. Supply the recorded feedback, structured virtual failures and any gap research. Keep the planned skill count fixed. The creator fixes skills/scripts and re-executes in a clean output directory or restores the input environment first. The executor imports outputs into `practice/revision-N/` and registers `revision` with a measured execution receipt as `execution.md` describes. The helper preserves each skill revision and hashes its outputs before another attempt. Outputs must come from the recorded skill revision; stale files cannot satisfy a later test. State the proposed correction and observable behavior expected from it, then check that prediction in the next allowed verification. Skill repair must change reusable content. An execution/delivery repair with unchanged skills is `repeat_practice` and counts only as another practice execution.
 
 ## Independent verifier
 
-The controller starts a separate verifier session with `run_subagent`, no `agent_id`. Its context contains only:
+The controller invokes `executor.py verifier`; it creates a fresh dedicated verifier Agent/Session in its own container. Its context contains only:
 
 - the task instruction and allowlisted environment inputs;
 - verification anchors with source citations;
@@ -47,11 +48,11 @@ Ask the verifier to:
 1. Map each public requirement to an independently supported expectation. Use verification knowledge or independent computation from inputs and documented rules. An assertion based solely on the current output is circular and invalid. Task instructions take precedence over a retrieved page that disagrees.
 2. Write a pytest suite with at most 60 collected test cases, including parameterized instances. Prefer equality on exact values; numeric tolerances must follow the documented contract. Test content as well as shape. At least 60% of tests should read and validate actual outputs, following the upstream verifier prompt. Every check needs a requirement/source mapping. No live LLM judgments, unseeded randomness or web lookups inside tests.
 3. Use assertion failures for incorrect/missing target outputs. Test setup, import, collection and execution errors are verifier failures, not low skill scores. Do not mark required checks skipped, xfailed or deselected to reach a pass.
-4. Run pytest once in the reserved attempt directory and save the script, raw log and JUnit XML report. Return broken test code to the controller for a new budgeted attempt; do not perform unrecorded reruns inside this session. Preserve expected values unless independent evidence proves the previous oracle wrong. Never weaken a test because the creator failed it. Test repair and added checks need a recorded reason, source and new suite hash; rates from different suites are not directly comparable.
+4. Submit the suite to the executor. It runs pytest once in a fresh measurement container and saves the raw log and JUnit XML report. Return broken test code to the controller for a new budgeted attempt; do not manufacture a report or perform unrecorded reruns. Preserve expected values unless independent evidence proves the previous oracle wrong. Never weaken a test because the creator failed it. Test repair and added checks need a recorded reason, source and new suite hash; rates from different suites are not directly comparable.
 5. Return a per-failure diagnosis: assertion id, observed value, expected value and its source, likely cause, and a specific revision suggestion. Do not change creator output or skill code.
 6. Save `coverage.json` using `execution.md`'s requirement-to-test format. Include unresolved required checks as `unverified`, even if all implemented assertions pass. Do not omit a diagnostic concern from the coverage map to obtain success. The map and its sources remain verifier evidence outside the deployed library.
 
-Before dispatch, the controller reserves `begin-verification`; after the attempt, it records
+Before dispatch, the executor reserves `begin-verification`; after the attempt, it records
 `finish-verification` with `execution_status: completed`, the actual pytest exit code and
 verifier session. If pytest did not start or was interrupted, record `not_started` or
 `interrupted` instead, without an exit code. A stale or partial XML cannot establish a valid
@@ -75,7 +76,7 @@ Save the parser's JSON as the virtual measurement. A parser `status: failed` has
 
 ## Diagnosis and retrieval
 
-Give a separate classifier call the failed assertions, verifier diagnosis and prior domain knowledge, with no creator implementation. Ask for one decision and its brief evidence:
+The controller classifies the failed assertions, verifier evidence and prior domain knowledge, with no target supervision. If a separate classifier is used, supply only these reviewed materials; never expose its process or files to construction containers. This controller-mediated diagnosis replaces the source’s dedicated classifier endpoint and must be reported as an adaptation. Ask for one decision and its brief evidence:
 
 - `SELF-FIXABLE`: the needed rule is already known; fix implementation, format, types or indexing.
 - `NEEDS-DR`: a missing domain rule, algorithm choice, reference value or API behavior requires external evidence.
@@ -116,6 +117,6 @@ Verifier errors and structural failures spend this retry budget too. If only the
 
 The source's internal episode limits are creator 60 / verifier 20, idle 3 / stale 10, with a context warning at 70% and export/stop at 90%. Penguin subagent turns are not Terminus episodes. Enforce the declared wall-time limit (30 minutes per Case by default) from the start of its research, and record that replacement rather than pretending to apply unavailable counters. Read `next` before dispatch and poll background roles with waits no longer than `min(30, remaining_seconds)` seconds. Budget the first draft and first verifier so feedback can still be applied within the existing total; avoid using the whole window on drafting. This scheduling advice grants no extra time or attempts.
 
-At the actual deadline, abort the active role with `input_subagent`, stop its practice process, and wait for writes to settle before preserving artifacts. The helper does not terminate host processes. Collect pending attempts as completed/interrupted/not-started according to what actually happened. A receipt for practice finished before the deadline can be registered afterward; late work cannot. Do not turn “nearly out of time” into `interrupted` or `verifier_failure`. If measured context usage is available, warn at 70% and stop at 90%; do not repeatedly restart a creator to evade the budget. A stalled role or unsupported verifier must end with concrete cause and recovery evidence, never an automatic pass. An invalid current skill set cannot be replaced by an older revision and called the final OpenSkill result.
+The executor aborts roles and removes their containers at the actual deadline. For an explicit cancellation use `executor.py stop`; after a host crash use `recover` once the old executor has exited. The validator alone does not terminate processes. Pending attempts are collected as completed/interrupted/not-started according to what actually happened. A receipt for practice finished before the deadline can be registered afterward; late work cannot. Do not turn “nearly out of time” into `interrupted` or `verifier_failure`. If measured context usage is available, warn at 70% and stop at 90%; do not repeatedly restart a creator to evade the budget. A stalled role or unsupported verifier must end with concrete cause and recovery evidence, never an automatic pass. An invalid current skill set cannot be replaced by an older revision and called the final OpenSkill result.
 
 At termination record the **current** skill digest, the digest and attempt of the last valid virtual measurement, whether the final practice execution was tested, and any unresolved final issues. `final_was_tested` requires completed execution, a valid report and a saved suite for that practice revision; skill hash equality alone is insufficient. A valid measurement can still contain failed assertions or missing coverage. Report actual skill changes separately from reruns and verifier repairs. Do not carry a previous revision's pass rate forward. No best-of-N restore, no score-based tie-break, and no target evaluation as a substitute verifier.

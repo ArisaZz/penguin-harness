@@ -515,7 +515,7 @@ def apply_event(out, state, request):
         raise ValueError(f"Unknown action: {kind}")
 
 
-def run(command, out, payload=None):
+def run(command, out, payload=None, *, executor=False):
     out = Path(out)
     if command == "status":
         return load(out)[0]
@@ -524,6 +524,9 @@ def run(command, out, payload=None):
         require(state["schema_version"] == 2, "Use the recorded Skill version for a historical journal")
         return workflow.guidance(state, datetime.now(timezone.utc))
     if command == "init":
+        require(payload.get("execution_mode") in (None, "isolated-v1"), "Unknown execution mode")
+        require(payload.get("execution_mode") != "isolated-v1" or executor,
+                "Initialize isolated runs through executor.py")
         state = initialize(payload)
         out.mkdir(parents=True, exist_ok=True)
         with locked(out):
@@ -533,6 +536,8 @@ def run(command, out, payload=None):
         return state
     with locked(out):
         state, sequence, previous = load(out)
+        require(state["config"].get("execution_mode") != "isolated-v1" or executor,
+                "Isolated runs accept mutations only through executor.py; role receipts cannot be self-reported")
         apply_event(out, state, payload)
         append(out, state, payload, sequence, previous)
     return state

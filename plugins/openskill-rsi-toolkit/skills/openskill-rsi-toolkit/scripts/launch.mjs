@@ -1,0 +1,166 @@
+/** SDK host for one isolated role. Model transport stays outside the role container. */
+import fs from "node:fs/promises";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+export function confiner(config) {
+  return (argv, opts) => {
+    if (!config.container?.match(/^openskill-[a-f0-9]{32}$/)) {
+      throw new Error("An isolated container is required");
+    }
+    const cwd = path.resolve(opts.cwd);
+    const roots = [config.writable ?? config.work, config.work, ...config.readonly];
+    if (!roots.some((root) => cwd === root || cwd.startsWith(root + path.sep))) {
+      throw new Error("Tool working directory is outside the role mounts");
+    }
+    const command = [...argv];
+    if (command[0] === process.execPath) command[0] = "/opt/openskill-node";
+    return {
+      argv: [
+        config.docker,
+        "exec",
+        "-i",
+        "--user",
+        `${config.uid}:${config.gid}`,
+        "--workdir",
+        cwd,
+        config.container,
+        "/usr/bin/env",
+        "-i",
+        "PATH=/usr/local/bin:/usr/bin:/bin",
+        "HOME=/tmp",
+        "LANG=C.UTF-8",
+        "PYTHONDONTWRITEBYTECODE=1",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1",
+        ...command,
+      ],
+    };
+  };
+}
+
+export function roleConfig(sdk, config) {
+  const defaults = sdk.defaultSystemConfig();
+  const allowed = new Set([
+    "read_file",
+    "write_file",
+    "edit_file",
+    "exec_command",
+    "input_command",
+  ]);
+  return {
+    version: 1,
+    system_prompt:
+      `You are the OpenSkill ${config.role}. Follow the supplied role contract. ` +
+      "Use only the provided public evidence. Work in the Workspace; external network is unavailable. " +
+      "Do not seek benchmark scores, hidden tests, other agents, credentials or host files. " +
+      "Report unavailable evidence honestly. Never claim that a self-report is an executor measurement.",
+    max_turns: -1,
+    model: { ...defaults.model, thinking_level: config.runtime.thinking_level },
+    compaction: defaults.compaction,
+    memory: { enabled: false },
+    vault: { enabled: false },
+    skills: { enabled: false },
+    schedules: { enabled: false },
+    tools: {
+      builtin: defaults.tools.builtin.filter((tool) => allowed.has(tool.name)),
+      mcpServers: [],
+    },
+  };
+}
+
+async function writeOnce(file, text) {
+  try {
+    await fs.writeFile(file, text, { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if (error.code !== "EEXIST" || (await fs.readFile(file, "utf8")) !== text) throw error;
+  }
+}
+
+async function main(file) {
+  const config = JSON.parse(await fs.readFile(file, "utf8"));
+  const sdk = await import(pathToFileURL(config.sdk).href);
+  if (!/^openskill_[a-f0-9]{32}$/.test(config.agent_id))
+    throw new Error("Dedicated agent id required");
+  const state = path.join(
+    config.penguin_home,
+    config.project_id,
+    "agents",
+    config.agent_id,
+    "agent_state",
+  );
+  await fs.mkdir(state, { recursive: true });
+  await writeOnce(path.join(state, "system_config.yaml"), JSON.stringify(roleConfig(sdk, config)));
+  await writeOnce(path.join(state, "AGENTS.md"), "");
+  const agent = await sdk.createAgent({
+    root: config.penguin_home,
+    projectId: config.project_id,
+    agentId: config.agent_id,
+    confineSpawn: () => confiner(config),
+    // Role tools receive no proxy or control credentials; docker exec also clears their env.
+    proxyEnv: () => null,
+    controlEnv: () => ({}),
+  });
+  const session = config.session_id
+    ? await agent.resumeSession({ sessionId: config.session_id })
+    : await agent.createSession({
+        workspaceDir: config.work,
+        provider: config.runtime.provider,
+        modelId: config.runtime.model_id,
+        thinkingLevel: config.runtime.thinking_level,
+      });
+  if (session.provider !== config.runtime.provider || session.modelId !== config.runtime.model_id) {
+    throw new Error("Construction model changed on resume");
+  }
+  // This SDK property is the live override, not the createSession default getter.
+  session.thinkingLevel = config.runtime.thinking_level;
+  const abort = new AbortController();
+  const stop = () => abort.abort();
+  process.on("SIGTERM", stop);
+  process.on("SIGINT", stop);
+  const timer = setTimeout(stop, Math.max(0, Date.parse(config.deadline) - Date.now()));
+  const log = await fs.open(config.messages, "wx", 0o600);
+  try {
+    // The executor registers the actual identity before authorizing the first model call.
+    process.stdout.write(JSON.stringify({ session_id: session.sessionId }) + "\n");
+    const go = await new Promise((resolve) => {
+      process.stdin.once("data", (data) => resolve(data.toString().trim()));
+      process.stdin.once("end", () => resolve(""));
+      abort.signal.addEventListener("abort", () => resolve(""), { once: true });
+    });
+    process.stdin.pause();
+    if (go !== "go" || abort.signal.aborted)
+      throw new Error("Launch was not authorized before deadline");
+    const iterator = session.run([sdk.userText(config.prompt)], {
+      approve: async () => "allow",
+      signal: abort.signal,
+    });
+    let cutoff;
+    while (true) {
+      const next = await iterator.next();
+      if (next.done) {
+        cutoff = next.value;
+        break;
+      }
+      await log.write(JSON.stringify(next.value) + "\n");
+    }
+    if (abort.signal.aborted || cutoff)
+      throw new Error(`Role did not complete: ${JSON.stringify(cutoff)}`);
+    await fs.writeFile(
+      config.result,
+      JSON.stringify({ session_id: session.sessionId, completed: true }),
+    );
+  } finally {
+    clearTimeout(timer);
+    process.off("SIGTERM", stop);
+    process.off("SIGINT", stop);
+    await session.dispose();
+    await log.close();
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main(process.argv[2]).catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}

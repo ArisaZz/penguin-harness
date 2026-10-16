@@ -6,7 +6,7 @@ The method is [OpenSkill: Open-World Self-Evolution for LLM Agents, v1](https://
 | --- | --- | --- |
 | Research query, domain knowledge and 1–4-skill plan | `libs/openskill/agent_planner.py`, `pipeline.py`, `skill_planner.py` | Two research passes and a fixed per-Case plan in the main Skill |
 | Verification knowledge distinct from background research | `pipeline.py::_run_surrogate_dr` | Independently sourced anchors in `verification-knowledge.md` |
-| Persistent creator, independent verifier, no GT oracle | `openskill_evolution.py::OpenSkillAgentBase._check_episode_exit`, `libs/terminus_agent/evolution/independent_verifier.py` | A persistent creator child; a separate verifier child; controller-mediated feedback |
+| Persistent creator, independent verifier, no GT oracle | `openskill_evolution.py::OpenSkillAgentBase._check_episode_exit`, `libs/terminus_agent/evolution/independent_verifier.py` | A persistent SDK creator; fresh verifier Agents in separate containers; controller-mediated feedback |
 | Failure diagnosis and targeted retrieval | `libs/openskill/targeted_dr.py` | `SELF-FIXABLE` / `NEEDS-DR`, up to three searches per Case |
 | Final skill export | `openskill_evolution.py::_export_skills_to_logs`, paper B.6 | Freeze the last revision, not the highest virtual score |
 | Zero-shot final evaluation | `pipeline.py::_run_evaluation`, paper §2.2.3 | The unchanged shared `evaluation.md`, invoked only after the global freeze |
@@ -18,7 +18,7 @@ The source's retry cap is checked before the next verification. A third failure 
 Declare the following adaptations when used:
 
 - Penguin's configured model and research tools replace the paper's particular Gemini research/classifier endpoints and Terminus creator. Record actual model identities and sampling defaults; do not claim those proprietary endpoints were used.
-- A workspace or configured sandbox replaces the per-task Docker environment only when it can reproduce the required task tools. Record the isolation actually enforced. Fresh conversations alone do not deny filesystem access.
+- New `isolated-v1` runs use separate Docker containers for each author and measurement, with the SDK model transport outside them. Earlier execution modes retain their recorded behavior. The reviewed image must reproduce the public task environment without graders or solutions.
 - Learned skills live under one Target-owned wrapper so native State loading, snapshots and evaluation work without host changes. For multiple Cases, all task skills coexist in one frozen library and route by public applicability; upstream deploys a separate set per task. The wrapper is fixed plumbing, not a learned fifth skill.
 - A fresh Target matches the no-initial-skills setting. Reusing a Target with domain skills is a warm start and must be reported separately.
 - A baseline comparison is optional and happens after the global freeze. The smoke profile uses one final run per Case; the paper uses five. A generic workspace Rubric gives a `0..100` benchmark score; a Harbor verifier supplies reward × 100. Neither is the virtual test pass rate.
@@ -84,3 +84,25 @@ Hashes establish byte identity, not causal improvement or correct verifier seman
 Existing experiments retain their recorded Skill version; this version does not reinterpret
 their results. The local executable regression checks the feedback-to-revision path, not
 Benchmark performance.
+
+## Isolated execution in the 2026.10.16.2 Skill
+
+Rechecked [v1 §2.2, A.5, B.3–B.6 and F](https://arxiv.org/html/2606.06741v1).
+The executor preserves the fixed model, 1–4-skill plan, persistent creator, independent
+verifier, failure-driven feedback, retrieval budgets, last-revision export and global
+freeze before target scoring. It does not add candidate selection or a GT feedback channel.
+
+The engineering changes are a host-owned SDK launcher, distinct container filesystems,
+allowlisted input/result transfer, actual process receipts, cancellation and recovery.
+The default practice mode keeps model-driven skill application, including Markdown skills;
+explicit command practice is a declared adaptation for executable tasks. Authoring and
+practice use separate clean containers and read-only practice skills. The controller still
+performs research and diagnosis with Penguin's configured tools and model, not the source's
+Gemini endpoint. Hosts must export state-only task outcomes to explicit public artifacts.
+
+Isolation is conditional on a reviewed image and clean controller-supplied content. It
+prevents direct cross-role file access; it does not prove that retrieval is uncontaminated,
+that a skill was meaningfully applied or that a verifier is correct. Local SDK/Docker tests
+exercise process isolation and a failed-test → same-creator repair → passing-test loop.
+These tests make no claim about benchmark gains. Previous runs and the shared final
+evaluation protocol remain unchanged.
