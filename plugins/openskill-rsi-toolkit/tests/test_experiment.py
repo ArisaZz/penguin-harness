@@ -20,6 +20,21 @@ Given a reserved attempt, dispatch can bind its separate verifier after reservat
 Given an older passing artifact, freeze refuses to replace the last registered revision with it.
 Given CLI errors or a concurrent writer, no extra journal event is published.
 Given passing checks but an unusable skill, structural diagnostics prevent a success claim.
+Given failed verification, continuing without a complete diagnosis is refused without a journal write.
+Given a skill repair, unchanged bytes cannot count as refinement; an explicit execution repair can rerun them.
+Given an execution receipt, wrong identities, stale timestamps and missing evidence cannot register practice.
+Given an interrupted or unstarted verifier, even a passing XML cannot mark the final artifact tested.
+Given an earlier valid measurement, a later verifier error does not erase that measurement.
+Given NEEDS-DR, a reserved or failed search cannot stand in for retrieved evidence.
+Given a recoverable failure, a bare stop label cannot end construction as an unrecoverable error.
+Given a false oracle claim, verifier repair requires an independent correction and cannot repair skill structure.
+Given the last failed verification, stopping at the cap cannot omit its recorded skill repair.
+Given an exhausted verifier budget, repair-only termination can preserve an honestly untested artifact.
+Given a near deadline, read-only guidance permits remaining work and switches to abort only at expiry.
+Given practice finished before its deadline, delayed collection succeeds but late execution is rejected.
+Given sealed recovery evidence, subsequent mutation prevents freezing.
+Given a schema-1 journal, status remains readable and new events cannot migrate it.
+Given executable faulty skills, independent feedback followed by a real code change fixes regenerated output.
 """
 
 import copy
@@ -72,6 +87,8 @@ class ExperimentTest(unittest.TestCase):
         return experiment.run("event", self.out, {"action": action, **kwargs})
 
     def ce(self, action, **kwargs):
+        if action == "finish-verification":
+            kwargs.setdefault("execution_status", "completed")
         return self.event(action, case_id="train-1", **kwargs)
 
     def status(self):
@@ -91,13 +108,49 @@ class ExperimentTest(unittest.TestCase):
         self.revision(0)
 
     def revision(self, number):
+        if number:
+            self.feedback()
         outputs = self.root / "practice" / f"revision-{number}"
         outputs.mkdir(parents=True)
         (outputs / "total.txt").write_text("3\n", encoding="utf-8")
         if number:
             with (self.root / "skills/calculate/scripts/total.py").open("a") as stream:
                 stream.write(f"# revision {number}\n")
-        return self.ce("revision", creator_session_id="creator", hypothesis="Sum rows before formatting")
+        return self.ce("revision", creator_session_id="creator", hypothesis="Sum rows before formatting",
+                       execution_record=self.receipt(number))
+
+    def receipt(self, number, **changes):
+        stamp = datetime.now(timezone.utc).isoformat()
+        log = self.root / "executions" / f"run-{number}.log"
+        log.parent.mkdir(exist_ok=True)
+        log.write_text("Executed total.py; wrote total.txt; exit 0\n")
+        relative = f"tasks/train-1/executions/run-{number}.json"
+        write_json(self.out / relative, {"creator_session_id": "creator",
+            "skills_sha256": digest(tree(self.root / "skills")),
+            "output_directory": f"tasks/train-1/practice/revision-{number}",
+            "commands": ["python3 calculate/scripts/total.py"], "exit_code": 0,
+            "started_at": stamp, "finished_at": stamp,
+            "evidence": [log.relative_to(self.out).as_posix()], **changes})
+        return relative
+
+    def feedback(self, action="revise_skill", classification="SELF-FIXABLE", **changes):
+        last = self.status()["cases"]["train-1"]["attempts"][-1]
+        log = self.root / "diagnoses" / f'attempt-{last["number"]}.txt'
+        log.parent.mkdir(exist_ok=True)
+        log.write_text("Independent arithmetic expectation and observed output disagree.\n")
+        return self.ce("feedback", **{"attempt": last["number"], "classification": classification,
+            "next_action": action, "issues": experiment.workflow.issues(last), "diagnosis": "Inspect the failed arithmetic check",
+            "expected_change": "Regenerated output agrees with independent sum", "evidence": [log.relative_to(self.out).as_posix()],
+            **changes})
+
+    def stop(self, reason, **changes):
+        log = self.root / "stop.log"
+        log.write_text("Role stopped; unavailable execution dependency confirmed.\n")
+        relative = "tasks/train-1/stop.json"
+        write_json(self.out / relative, {"reason": reason, "cause": "Execution dependency unavailable",
+            "workers_stopped": True, "recoverable": False, "why_recovery_impossible": "Offline dependency has no available replacement",
+            "interruption": "host_interruption", "evidence": [log.relative_to(self.out).as_posix()], **changes})
+        return self.ce("finish-case", reason=reason, record=relative)
 
     def verify(self, passed=True, covered=True):
         state = self.ce("begin-verification", verifier_session_id="verifier")
@@ -177,6 +230,10 @@ class ExperimentTest(unittest.TestCase):
         self.assertFalse(attempt["accepted"])
         self.assertIn("missing.py", attempt["structure_error"])
         self.rejected("finish-case", case_id="train-1", reason="surrogate_pass")
+        before = self.status()
+        with self.assertRaises(ValueError):
+            self.feedback(action="repair_verifier")
+        self.assertEqual(self.status(), before)
 
     def test_failed_verifier_attempts_spend_budget_without_a_report(self):
         self.draft()
@@ -184,6 +241,7 @@ class ExperimentTest(unittest.TestCase):
             self.ce("begin-verification", verifier_session_id="verifier")
             result = self.ce("finish-verification", pytest_exit_code=2)
             self.assertEqual(result["cases"]["train-1"]["attempts"][-1]["result"]["status"], "failed")
+            self.feedback(action="repair_verifier")
         self.rejected("begin-verification", case_id="train-1", verifier_session_id="verifier")
 
     def test_last_revision_is_exported_untested_without_best_of_n(self):
@@ -252,7 +310,8 @@ class ExperimentTest(unittest.TestCase):
         self.rejected("finish-verification", case_id="train-1", pytest_exit_code=0)
         output.write_text("3\n")
         self.ce("finish-verification", pytest_exit_code=2)
-        self.ce("finish-case", reason="verifier_failure")
+        self.feedback(action="repair_verifier")
+        self.stop("verifier_failure")
         self.assemble()
         evidence = self.root / "verify/attempt-1"
         evidence.mkdir(parents=True)
@@ -274,7 +333,7 @@ class ExperimentTest(unittest.TestCase):
 
     def test_contaminated_case_blocks_deployment(self):
         self.draft()
-        self.ce("finish-case", reason="contaminated")
+        self.stop("contaminated")
         self.assemble()
         self.rejected("freeze")
 
@@ -293,6 +352,7 @@ class ExperimentTest(unittest.TestCase):
     def test_gap_search_counts_issued_requests_and_rejects_identifiers(self):
         self.draft()
         self.verify(passed=False)
+        self.feedback(classification="NEEDS-DR")
         self.rejected("targeted-search", case_id="train-1", classification="NEEDS-DR", query="train-1 solution")
         self.rejected("targeted-search", case_id="train-1", classification="SELF-FIXABLE", query="arithmetic")
         for _ in range(3):
@@ -334,7 +394,7 @@ class ExperimentTest(unittest.TestCase):
         self.draft()
         self.verify(passed=False)
         self.revision(1)
-        self.ce("finish-case", reason="interrupted")
+        self.stop("interrupted")
         self.assemble()
         library = self.out / "library/tasks/train-1"
         shutil.rmtree(library)
@@ -370,6 +430,248 @@ class ExperimentTest(unittest.TestCase):
         self.ce("finish-case", reason="surrogate_pass")
         self.assemble()
         self.rejected("freeze")
+
+    def test_failed_checks_require_diagnosis_and_skill_repair(self):
+        self.draft()
+        self.verify(passed=False)
+        self.rejected("begin-verification", case_id="train-1", verifier_session_id="verifier")
+        self.rejected("revision", case_id="train-1", creator_session_id="creator", hypothesis="Retry")
+        for changes in ({"issues": []}, {"attempt": 2}, {"diagnosis": ""}, {"evidence": []}):
+            before = self.status()
+            with self.assertRaises(ValueError):
+                self.feedback(**changes)
+            self.assertEqual(self.status(), before)
+        self.feedback()
+        self.rejected("begin-verification", case_id="train-1", verifier_session_id="verifier")
+        outputs = self.root / "practice/revision-1"
+        outputs.mkdir(); (outputs / "total.txt").write_text("3\n")
+        self.rejected("revision", case_id="train-1", creator_session_id="creator", hypothesis="Unchanged",
+                      execution_record=self.receipt(1))
+        self.assertEqual(experiment.run("next", self.out)["cases"]["train-1"]["skill_changes_after_feedback"], 0)
+
+    def test_explicit_rerun_is_not_a_skill_change_or_a_tested_new_execution(self):
+        self.draft()
+        self.verify(passed=False)
+        self.feedback(action="repeat_practice", execution_issue="Prior command wrote the wrong output directory")
+        shutil.copytree(self.root / "practice/revision-0", self.root / "practice/revision-1")
+        self.ce("revision", creator_session_id="creator", hypothesis="Correct the output argument",
+                execution_record=self.receipt(1))
+        next_case = experiment.run("next", self.out)["cases"]["train-1"]
+        self.assertEqual(next_case["practice_executions"], 2)
+        self.assertEqual(next_case["skill_changes_after_feedback"], 0)
+        case = self.stop("interrupted")["cases"]["train-1"]
+        self.assertEqual(case["final_sha256"], case["last_tested_sha256"])
+        self.assertFalse(case["final_was_tested"])
+        self.assertEqual(case["final_verification_issues"], ["not_run"])
+
+    def test_receipts_must_describe_the_current_execution(self):
+        self.ce("start-case")
+        self.ce("plan", skills=["calculate"], creator_session_id="creator")
+        self.root = self.out / "tasks/train-1"
+        skill(self.root / "skills")
+        output = self.root / "practice/revision-0"
+        output.mkdir(parents=True); (output / "total.txt").write_text("3\n")
+        for changes in ({"creator_session_id": "other"}, {"skills_sha256": "old"},
+                        {"output_directory": "practice/old"}, {"evidence": []}, {"exit_code": None},
+                        {"started_at": "2000-01-01T00:00:00+00:00"},
+                        {"finished_at": "2100-01-01T00:00:00+00:00"}):
+            self.rejected("revision", case_id="train-1", creator_session_id="creator", hypothesis="Execute",
+                          execution_record=self.receipt(0, **changes))
+        self.ce("revision", creator_session_id="creator", hypothesis="Execute", execution_record=self.receipt(0))
+
+    def test_unfinished_verification_cannot_use_a_passing_report(self):
+        self.draft()
+        for status in ("not_started", "interrupted"):
+            state = self.ce("begin-verification", verifier_session_id="verifier")
+            folder = Path(state["cases"]["train-1"]["attempts"][-1]["directory"])
+            folder.mkdir(parents=True)
+            (folder / "suite.py").write_text("def test_sum(): assert 1 + 2 == 3\n")
+            (folder / "report.xml").write_text('<testsuite><testcase name="sum"/></testsuite>')
+            self.rejected("finish-verification", case_id="train-1", execution_status=status, pytest_exit_code=0)
+            state = self.ce("finish-verification", execution_status=status)
+            attempt = state["cases"]["train-1"]["attempts"][-1]
+            self.assertFalse(attempt["accepted"])
+            self.assertNotIn("pass_rate", attempt["result"])
+            self.feedback(action="repair_verifier")
+        case = self.stop("verifier_failure")["cases"]["train-1"]
+        self.assertFalse(case["final_was_tested"])
+        self.assertIsNone(case["last_tested_sha256"])
+
+    def test_later_verifier_failure_keeps_the_last_valid_measurement(self):
+        self.draft()
+        self.verify(covered=False)
+        self.feedback(action="repair_verifier")
+        self.ce("begin-verification", verifier_session_id="verifier")
+        self.ce("finish-verification", execution_status="interrupted")
+        self.feedback(action="repair_verifier")
+        case = self.stop("verifier_failure")["cases"]["train-1"]
+        self.assertTrue(case["final_was_tested"])
+        self.assertEqual(case["last_valid_verification_attempt"], 1)
+        self.assertIn("verifier_error", case["final_verification_issues"])
+
+    def test_gap_search_needs_retrieved_evidence_before_repair(self):
+        self.draft()
+        self.verify(covered=False)
+        self.feedback(action="repair_verifier", classification="NEEDS-DR")
+        self.ce("targeted-search", classification="NEEDS-DR", query="precision rules")
+        self.rejected("begin-verification", case_id="train-1", verifier_session_id="verifier")
+        evidence = "tasks/train-1/retrieval-1.txt"
+        (self.out / evidence).write_text("Provider request failed; no rule retrieved.\n")
+        self.ce("search-result", search=1, outcome="unavailable", summary="Provider unavailable", evidence=[evidence])
+        self.rejected("begin-verification", case_id="train-1", verifier_session_id="verifier")
+        self.ce("targeted-search", classification="NEEDS-DR", query="documented decimal precision")
+        evidence = "tasks/train-1/retrieval-2.txt"
+        (self.out / evidence).write_text("Public documentation on decimal precision.\n")
+        self.ce("search-result", search=2, outcome="retrieved", summary="Precision rule located",
+                sources=["https://docs.python.org/3/library/decimal.html"], evidence=[evidence])
+        self.rejected("search-result", case_id="train-1", search=2, outcome="unavailable")
+        self.assertEqual(len(self.status()["cases"]["train-1"]["searches"]), 2)
+        self.verify()
+        self.ce("finish-case", reason="surrogate_pass")
+
+    def test_early_stop_requires_nonrecoverable_evidence(self):
+        self.draft()
+        self.ce("begin-verification", verifier_session_id="verifier")
+        self.ce("finish-verification", execution_status="not_started")
+        self.feedback(action="repair_verifier")
+        self.rejected("finish-case", case_id="train-1", reason="verifier_failure")
+        for changes in ({"recoverable": True}, {"workers_stopped": False}, {"evidence": []},
+                        {"why_recovery_impossible": ""}):
+            before = self.status()
+            with self.assertRaises(ValueError):
+                self.stop("verifier_failure", **changes)
+            self.assertEqual(self.status(), before)
+        self.assertTrue(self.stop("verifier_failure")["cases"]["train-1"]["finished"])
+
+    def test_context_and_interruption_stops_require_observed_causes(self):
+        self.draft()
+        for reason, changes in (("context_budget", {"context_used": 89, "context_limit": 100}),
+                                ("interrupted", {"interruption": "time_remaining_is_short"})):
+            before = self.status()
+            with self.assertRaises(ValueError):
+                self.stop(reason, **changes)
+            self.assertEqual(self.status(), before)
+        self.assertEqual(self.stop("context_budget", context_used=90, context_limit=100)
+                         ["cases"]["train-1"]["reason"], "context_budget")
+
+    def test_oracle_repair_needs_an_independent_correction(self):
+        self.draft()
+        self.verify(passed=False)
+        before = self.status()
+        with self.assertRaises(ValueError):
+            self.feedback(action="repair_verifier")
+        self.assertEqual(self.status(), before)
+        self.feedback(action="repair_verifier", oracle_correction="Public instruction requires integer addition")
+        self.verify()
+        self.ce("finish-case", reason="surrogate_pass")
+
+    def test_final_failure_cannot_skip_its_skill_repair(self):
+        self.draft()
+        for number in range(1, 3):
+            self.verify(passed=False)
+            self.revision(number)
+        self.verify(passed=False)
+        self.rejected("finish-case", case_id="train-1", reason="max_refinement_retries")
+        self.feedback()
+        self.rejected("finish-case", case_id="train-1", reason="max_refinement_retries")
+        self.rejected("finish-case", case_id="train-1", reason="time_budget")
+
+    def test_verifier_cap_preserves_an_untested_artifact_without_new_practice(self):
+        self.draft()
+        for _ in range(3):
+            self.ce("begin-verification", verifier_session_id="verifier")
+            self.ce("finish-verification", execution_status="not_started")
+            self.feedback(action="repair_verifier")
+        self.assertEqual(experiment.run("next", self.out)["cases"]["train-1"]["next_action"],
+                         "finish_max_refinement_retries")
+        case = self.ce("finish-case", reason="max_refinement_retries")["cases"]["train-1"]
+        self.assertFalse(case["final_was_tested"])
+        self.assertEqual(len(case["revisions"]), 1)
+
+    def test_guidance_is_read_only_and_uses_the_real_deadline(self):
+        self.draft()
+        self.ce("begin-verification", verifier_session_id="verifier")
+        before = tree(self.out / "journal")
+        start = datetime.fromisoformat(self.status()["cases"]["train-1"]["started_at"])
+        for seconds, action, remaining in ((1790, "collect_verification", 10),
+                                           (1800, "abort_and_collect_verification", 0)):
+            with patch.object(experiment, "datetime") as clock:
+                clock.now.return_value = start + timedelta(seconds=seconds)
+                case = experiment.run("next", self.out)["cases"]["train-1"]
+            self.assertEqual(case["next_action"], action)
+            self.assertEqual(case["remaining_seconds"], remaining)
+        self.assertEqual(tree(self.out / "journal"), before)
+
+    def test_delayed_collection_accepts_timely_execution_only(self):
+        self.ce("start-case")
+        self.ce("plan", skills=["calculate"], creator_session_id="creator")
+        self.root = self.out / "tasks/train-1"; skill(self.root / "skills")
+        outputs = self.root / "practice/revision-0"
+        outputs.mkdir(parents=True); (outputs / "total.txt").write_text("3\n")
+        start = datetime.fromisoformat(self.status()["cases"]["train-1"]["started_at"])
+        timely = self.receipt(0)
+        with patch.object(experiment, "datetime", wraps=datetime) as clock:
+            clock.now.return_value = start + timedelta(minutes=31)
+            late = self.receipt(0, finished_at=(start + timedelta(minutes=31)).isoformat())
+            self.rejected("revision", case_id="train-1", creator_session_id="creator", hypothesis="Late",
+                          execution_record=late)
+            timely = self.receipt(0)
+            self.ce("revision", creator_session_id="creator", hypothesis="Already finished", execution_record=timely)
+            self.ce("finish-case", reason="time_budget")
+
+    def test_mutated_execution_evidence_prevents_freeze(self):
+        self.draft(); self.verify()
+        self.ce("finish-case", reason="surrogate_pass")
+        (self.root / "executions/run-0.log").write_text("Different execution\n")
+        self.assemble()
+        self.rejected("freeze")
+
+    def test_old_journal_is_readable_without_implicit_migration(self):
+        path = self.out / "journal/000001.json"
+        record = read_json(path); record["state"]["schema_version"] = 1; write_json(path, record)
+        before = tree(self.out / "journal")
+        self.assertEqual(self.status()["schema_version"], 1)
+        self.rejected("start-case", case_id="train-1")
+        self.assertEqual(tree(self.out / "journal"), before)
+
+    def test_executable_skill_improves_only_after_feedback_and_code_change(self):
+        self.ce("start-case"); self.ce("plan", skills=["calculate"], creator_session_id="creator")
+        self.root = self.out / "tasks/train-1"; skill(self.root / "skills")
+        script = self.root / "skills/calculate/scripts/total.py"
+        # The verifier uses independent public arithmetic, never the skill implementation.
+        for number, expression in enumerate(("max", "sum")):
+            script.write_text(f"import sys\nprint({expression}(map(int, sys.argv[1:])))\n")
+            output = self.root / f"practice/revision-{number}"
+            output.mkdir(parents=True)
+            result = subprocess.run([sys.executable, str(script), "1", "2"], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0)
+            (output / "total.txt").write_text(result.stdout)
+            receipt = self.receipt(number, commands=[f"python3 {script} 1 2"])
+            (self.root / f"executions/run-{number}.log").write_text(result.stdout)
+            self.ce("revision", creator_session_id="creator", hypothesis="Use addition for numeric rows",
+                    execution_record=receipt)
+            state = self.ce("begin-verification", verifier_session_id="verifier")
+            folder = Path(state["cases"]["train-1"]["attempts"][-1]["directory"]); folder.mkdir(parents=True)
+            suite = folder / "suite.py"
+            suite.write_text("import pathlib, sys\nassert int(pathlib.Path(sys.argv[1]).read_text()) == 3\n")
+            checked = subprocess.run([sys.executable, str(suite), str(output / "total.txt")],
+                                     capture_output=True, text=True)
+            (folder / "check.log").write_text(checked.stderr or "Check passed\n")
+            failure = '<failure message="Expected public arithmetic sum 3"/>' if checked.returncode else ""
+            (folder / "report.xml").write_text(f'<testsuite><testcase classname="rows" name="sum">{failure}</testcase></testsuite>')
+            write_json(folder / "coverage.json", [{"requirement": "sum", "required": True,
+                "source": "Public arithmetic 1 + 2 = 3", "status": "covered", "tests": ["rows::sum"]}])
+            self.ce("finish-verification", pytest_exit_code=checked.returncode)
+            if number == 0:
+                self.assertEqual(checked.returncode, 1)
+                self.feedback()
+            else:
+                self.assertEqual(checked.returncode, 0)
+        case = self.ce("finish-case", reason="surrogate_pass")["cases"]["train-1"]
+        self.assertTrue(case["final_was_tested"])
+        self.assertNotEqual(case["revisions"][0]["skills_sha256"], case["final_sha256"])
+        self.assertEqual(experiment.run("next", self.out)["cases"]["train-1"]["skill_changes_after_feedback"], 1)
+        self.assemble(); self.assertEqual(self.event("freeze")["phase"], "frozen")
 
 
 class ArtifactTest(unittest.TestCase):

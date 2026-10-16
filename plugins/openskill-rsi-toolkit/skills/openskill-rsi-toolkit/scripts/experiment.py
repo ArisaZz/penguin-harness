@@ -3,6 +3,7 @@
 
 import argparse
 import copy
+import hashlib
 import importlib.util
 import json
 import math
@@ -17,6 +18,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 from artifacts import check_case, check_library, digest, identifier, read_json, require, strings, tree
+import workflow
 
 spec = importlib.util.spec_from_file_location("virtual_results", Path(__file__).with_name("virtual-results.py"))
 virtual_results = importlib.util.module_from_spec(spec)
@@ -110,7 +112,7 @@ def initialize(config):
     for role in ("construction", "target"):
         for key in ("provider", "model_id", "thinking_level"):
             nonempty(config["runtime"][role][key], f"{role}.{key}")
-    return {"schema_version": 1, "phase": "construction", "config": config, "cases": {}}
+    return {"schema_version": 2, "phase": "construction", "config": config, "cases": {}}
 
 
 def case_root(out, case_id):
@@ -126,8 +128,7 @@ def prefixes(out, state):
 
 
 def expired(case, config):
-    seconds = (datetime.now(timezone.utc) - datetime.fromisoformat(case["started_at"])).total_seconds()
-    return seconds >= config["construction_timeout_minutes"] * 60
+    return workflow.clock(case, config, datetime.now(timezone.utc))["remaining_seconds"] == 0
 
 
 def coverage_complete(path, result):
@@ -163,17 +164,25 @@ def evaluation_plan(state):
             for variant in variants for case in cases for run in range(1, config["runs"] + 1)]
 
 
-def verify_history(root, case):
+def verify_history(out, root, case):
     for revision in case["revisions"]:
         number = revision["revision"]
         require(digest(tree(root / "revisions" / f"revision-{number}")) == revision["skills_sha256"],
                 "Historical skill revision changed")
         require(digest(tree(root / "practice" / f"revision-{number}")) == revision["outputs_sha256"],
                 "Historical practice output changed")
+        verify_evidence(out, revision["execution_evidence"])
     for attempt in case["attempts"]:
         folder = Path(attempt["directory"])
         actual = tree(folder, allow_empty=True) if folder.exists() else {}
         require(actual == attempt["evidence"], "Historical verification evidence changed")
+        if "feedback" in attempt:
+            verify_evidence(out, attempt["feedback"]["evidence"])
+    for search in case["searches"]:
+        if "result" in search:
+            verify_evidence(out, search["result"]["evidence"])
+    if "termination_evidence" in case:
+        verify_evidence(out, case["termination_evidence"])
 
 
 def report_path(out, relative):
@@ -182,6 +191,72 @@ def report_path(out, relative):
             and path.resolve().is_relative_to(out.resolve()) and path.is_file()
             and not path.is_symlink(), "Report must exist as a regular file inside OUT")
     return path
+
+
+def seal_evidence(out, paths):
+    strings(paths, "evidence paths")
+    result = {}
+    for relative in paths:
+        payload = report_path(out, relative).read_bytes()
+        require(payload.strip(), "Evidence file is empty")
+        result[relative] = hashlib.sha256(payload).hexdigest()
+    return result
+
+
+def verify_evidence(out, evidence):
+    require(seal_evidence(out, list(evidence)) == evidence, "Recorded execution or recovery evidence changed")
+
+
+def execution_receipt(out, root, case, config, revision, skills, relative):
+    path = report_path(out, relative)
+    require(path.resolve().is_relative_to(root.resolve()), "Execution receipt must belong to its Case")
+    record = read_json(path)
+    require(record["creator_session_id"] == case["creator_session_id"], "Execution used another creator")
+    require(record["skills_sha256"] == digest(skills), "Execution receipt describes different skills")
+    expected = root / "practice" / f"revision-{revision}"
+    require(record["output_directory"] == expected.relative_to(out).as_posix(),
+            "Execution receipt describes another practice directory")
+    strings(record["commands"], "executed commands")
+    require(type(record["exit_code"]) is int, "Execution receipt needs the actual process exit code")
+    started, finished = (datetime.fromisoformat(record[k]) for k in ("started_at", "finished_at"))
+    require(started.tzinfo is not None and finished.tzinfo is not None, "Execution timestamps need a timezone")
+    earliest = (case["attempts"][-1]["feedback"]["recorded_at"] if revision else case["started_at"])
+    require(datetime.fromisoformat(earliest) <= started <= finished <= datetime.now(timezone.utc),
+            "Practice execution must follow its feedback and cannot be in the future")
+    deadline = workflow.clock(case, config, datetime.now(timezone.utc))["deadline_at"]
+    require(finished <= datetime.fromisoformat(deadline), "Practice execution exceeded the construction deadline")
+    evidence = seal_evidence(out, record["evidence"])
+    evidence.update(seal_evidence(out, [relative]))
+    return evidence
+
+
+def stop_record(out, case, reason, request):
+    record = read_json(report_path(out, request["record"]))
+    require(record["reason"] == reason, "Stop evidence names another reason")
+    require(record["workers_stopped"] is True, "Stop role writes before closing the Case")
+    nonempty(record["cause"], "stop cause")
+    evidence = seal_evidence(out, record["evidence"])
+    evidence.update(seal_evidence(out, [request["record"]]))
+    if reason in ("verifier_failure", "environment_failure"):
+        require(record["recoverable"] is False, "Recoverable failures must continue within the budget")
+        strings(record.get("recovery_attempts", []), "recovery attempts", allow_empty=True)
+        if not record.get("recovery_attempts"):
+            nonempty(record.get("why_recovery_impossible"), "why recovery cannot be attempted")
+    if reason == "verifier_failure":
+        decision = workflow.feedback(case)
+        last = case["attempts"][-1]
+        require(decision["next_action"] == "repair_verifier", "Skill/practice faults need their recorded recovery")
+        require("skill_structure" not in workflow.issues(last), "A skill structural fault is not a verifier failure")
+        if "assertion_failure" in workflow.issues(last):
+            nonempty(decision.get("oracle_correction"), "independent evidence of an incorrect verifier")
+    if reason == "context_budget":
+        used, limit = record["context_used"], record["context_limit"]
+        require(type(used) is int and type(limit) is int and limit > 0 and used >= .9 * limit,
+                "Context stop requires an observed usage at or above 90%")
+    if reason == "interrupted":
+        require(record["interruption"] in ("user_stop", "creator_unavailable", "host_interruption"),
+                "Interruption needs an external cause; time exhaustion uses time_budget")
+    case["termination_evidence"] = evidence
 
 
 def validate_matrices(out, state, relative):
@@ -211,6 +286,8 @@ def validate_matrices(out, state, relative):
 
 
 def apply_event(out, state, request):
+    require(state["schema_version"] == 2,
+            "Historical journal is read-only here; resume with its recorded Skill version, never migrate it")
     kind = request["action"]
     config = state["config"]
     if kind in ("freeze", "begin-evaluation", "finish-evaluation"):
@@ -222,7 +299,7 @@ def apply_event(out, state, request):
             plans = {key: case["skills"] for key, case in state["cases"].items()}
             library = check_library(out / "library", plans, prefixes(out, state))
             for case_id, case in state["cases"].items():
-                verify_history(case_root(out, case_id), case)
+                verify_history(out, case_root(out, case_id), case)
                 require(library["cases"][case_id]["sha256"] == case["final_sha256"],
                         "Library is not the last recorded revision")
             state.update(phase="frozen", library=library, frozen_at=now())
@@ -261,7 +338,7 @@ def apply_event(out, state, request):
         return
     case = state["cases"][case_id]
     require(not case.get("finished"), "Case is closed")
-    if kind not in ("finish-verification", "finish-case"):
+    if kind not in ("revision", "finish-verification", "search-result", "finish-case"):
         require(not expired(case, config), "Construction time budget exhausted")
     if kind == "plan":
         require("skills" not in case, "Skill plan and creator are fixed")
@@ -279,23 +356,36 @@ def apply_event(out, state, request):
             last = case["attempts"][-1]
             require(last["revision"] == len(case["revisions"]) - 1, "Current revision has not been verified")
             require(not last["accepted"], "Stop on a complete virtual pass")
+            decision = workflow.research_ready(case)
+            require(decision["next_action"] in ("revise_skill", "repeat_practice"),
+                    "Repair the verifier in a new attempt without inventing a practice revision")
         require(len(case["revisions"]) <= config["max_refinement_retries"], "Practice budget exhausted")
         revision = len(case["revisions"])
         skills = tree(root / "skills")
         outputs = tree(root / "practice" / f"revision-{revision}")
+        change = "initial" if not revision else decision["next_action"]
+        if revision:
+            changed = digest(skills) != case["revisions"][-1]["skills_sha256"]
+            require(changed == (change == "revise_skill"),
+                    "Skill repair must change skills; unchanged skills are repeat_practice, not refinement")
         nonempty(request["hypothesis"], "revision hypothesis")
+        execution = execution_receipt(out, root, case, config, revision, skills, request["execution_record"])
         snapshot = root / "revisions" / f"revision-{revision}"
         if snapshot.exists():
             require(tree(snapshot) == skills, "Revision snapshot exists with different content")
         else:
             shutil.copytree(root / "skills", snapshot)
         case["revisions"].append({"revision": revision, "skills_sha256": digest(skills),
-                                  "outputs_sha256": digest(outputs), "hypothesis": request["hypothesis"]})
+                                  "outputs_sha256": digest(outputs), "hypothesis": request["hypothesis"],
+                                  "change_kind": change, "execution_evidence": execution})
     elif kind == "begin-verification":
         require(case["revisions"] and not case.get("pending"), "Need a revision and no active verification")
         require(len(case["attempts"]) < config["max_refinement_retries"], "Verification budget exhausted")
         require(not case["attempts"] or not case["attempts"][-1]["accepted"], "Stop on a complete virtual pass")
         revision = case["revisions"][-1]
+        if case["attempts"] and case["attempts"][-1]["revision"] == revision["revision"]:
+            require(workflow.research_ready(case)["next_action"] == "repair_verifier",
+                    "Apply feedback and re-execute practice before another verification")
         require(digest(tree(root / "skills")) == revision["skills_sha256"], "Unrecorded skill revision")
         require(digest(tree(root / "practice" / f'revision-{revision["revision"]}')) == revision["outputs_sha256"],
                 "Practice outputs changed after revision registration")
@@ -325,8 +415,14 @@ def apply_event(out, state, request):
                 "Verifier changed practice outputs")
         folder = Path(attempt["directory"])
         require(folder.resolve().is_relative_to(root.resolve()), "Verification path escapes Case")
-        require(type(request["pytest_exit_code"]) is int, "pytest_exit_code must be an integer")
-        result = virtual_results.read_result(folder / "report.xml", request["pytest_exit_code"], config["max_virtual_tests"])
+        execution_status = request["execution_status"]
+        require(execution_status in ("completed", "interrupted", "not_started"), "Invalid verification execution status")
+        if execution_status == "completed":
+            require(type(request["pytest_exit_code"]) is int, "pytest_exit_code must be an integer")
+            result = virtual_results.read_result(folder / "report.xml", request["pytest_exit_code"], config["max_virtual_tests"])
+        else:
+            require(request.get("pytest_exit_code") is None, "Uncompleted pytest has no completed exit code")
+            result = virtual_results.failed("verification_" + execution_status, "No completed virtual measurement")
         evidence = tree(folder, allow_empty=True) if folder.exists() else {}
         coverage_error = None
         try:
@@ -341,22 +437,43 @@ def apply_event(out, state, request):
             structure, structure_error = False, str(exc)
         accepted = (result["status"] == "ok" and result["pass_rate"] == 1 and coverage and structure
                     and "suite.py" in evidence)
-        attempt.update(finished=True, result=result, evidence=evidence, coverage_complete=coverage,
+        attempt.update(finished=True, execution_status=execution_status, result=result, evidence=evidence, coverage_complete=coverage,
                        coverage_error=coverage_error, structure_valid=structure, structure_error=structure_error,
                        accepted=accepted,
                        verifier_session_id=verifier)
         case.pop("pending")
+    elif kind == "feedback":
+        require(case["attempts"] and not case.get("pending"), "Finish verification before diagnosing it")
+        workflow.validate_feedback(case, request)
+        evidence = seal_evidence(out, request["evidence"])
+        case["attempts"][-1]["feedback"] = {**request, "evidence": evidence, "recorded_at": now()}
     elif kind == "targeted-search":
         require(case["attempts"] and case["attempts"][-1].get("finished")
                 and not case["attempts"][-1]["accepted"], "Gap retrieval follows failed virtual verification")
         require(request["classification"] == "NEEDS-DR", "Only knowledge gaps trigger targeted retrieval")
+        require(workflow.feedback(case)["classification"] == "NEEDS-DR", "Search must follow the recorded gap diagnosis")
+        require(case["attempts"][-1]["revision"] == case["revisions"][-1]["revision"],
+                "Verify the new practice execution before diagnosing another gap")
         require(len(case["searches"]) < config["max_targeted_searches"], "Targeted search budget exhausted")
         nonempty(request["query"], "sanitized query")
         forbidden = [config["benchmark_id"], config.get("test_benchmark_id"), *config["case_ids"],
                      *config.get("test_case_ids", [])]
         require(not any(word and word.lower() in request["query"].lower() for word in forbidden),
                 "Query contains a Benchmark/Case identifier")
-        case["searches"].append({"query": request["query"], "time": now()})
+        case["searches"].append({"query": request["query"], "time": now(),
+                                "attempt": case["attempts"][-1]["number"]})
+    elif kind == "search-result":
+        positive(request["search"], "Search index")
+        require(request["search"] <= len(case["searches"]), "No such reserved search")
+        search = case["searches"][request["search"] - 1]
+        require("result" not in search, "Search result is sealed")
+        require(not case.get("pending") and search["attempt"] == case["attempts"][-1]["number"],
+                "Collect the search result before the next attempt")
+        require(request["outcome"] in ("retrieved", "unavailable"), "Invalid retrieval outcome")
+        nonempty(request["summary"], "retrieval finding or failure")
+        if request["outcome"] == "retrieved":
+            strings(request["sources"], "retrieved source URLs")
+        search["result"] = {**request, "evidence": seal_evidence(out, request["evidence"])}
     elif kind == "finish-case":
         require(not case.get("pending"), "Finish the active verification record first")
         reason = request["reason"]
@@ -368,8 +485,16 @@ def apply_event(out, state, request):
                     "Surrogate success requires passing assertions, coverage, structure and remaining time")
         if reason == "max_refinement_retries":
             require(len(case["attempts"]) == config["max_refinement_retries"], "Verification budget not exhausted")
+            last = case["attempts"][-1]
+            require(not last["accepted"], "A complete pass must finish as surrogate_pass")
+            decision = workflow.feedback(case)
+            if decision["next_action"] != "repair_verifier":
+                require(case["revisions"][-1]["revision"] > last["revision"],
+                        "Apply the final failure-driven practice revision before exporting; use time_budget if expired")
         if reason == "time_budget":
             require(expired(case, config), "Time budget not exhausted")
+        if reason not in ("surrogate_pass", "max_refinement_retries", "time_budget"):
+            stop_record(out, case, reason, request)
         deployable = reason not in ("contaminated", "construction_failed") and bool(case["revisions"])
         if deployable:
             current = check_case(root / "skills", case_id, case["skills"], prefixes(out, state))
@@ -377,8 +502,14 @@ def apply_event(out, state, request):
             last = case["attempts"][-1] if case["attempts"] else None
             if reason == "surrogate_pass":
                 require(current["sha256"] == last["skill_sha256"], "Passing tests describe another revision")
-            case.update(final_sha256=current["sha256"], last_tested_sha256=last["skill_sha256"] if last else None,
-                        final_was_tested=bool(last and current["sha256"] == last["skill_sha256"]))
+            valid = [a for a in case["attempts"] if workflow.measured(a)]
+            tested = valid[-1] if valid else None
+            current_attempts = [a for a in valid if a["revision"] == case["revisions"][-1]["revision"]]
+            case.update(final_sha256=current["sha256"], last_tested_sha256=tested["skill_sha256"] if tested else None,
+                        last_valid_verification_attempt=tested["number"] if tested else None,
+                        final_was_tested=bool(current_attempts and current["sha256"] == current_attempts[-1]["skill_sha256"]),
+                        final_verification_issues=(workflow.issues(last) if last and
+                            last["revision"] == case["revisions"][-1]["revision"] else ["not_run"]))
         case.update(finished=True, reason=reason, deployable=deployable)
     else:
         raise ValueError(f"Unknown action: {kind}")
@@ -388,6 +519,10 @@ def run(command, out, payload=None):
     out = Path(out)
     if command == "status":
         return load(out)[0]
+    if command == "next":
+        state = load(out)[0]
+        require(state["schema_version"] == 2, "Use the recorded Skill version for a historical journal")
+        return workflow.guidance(state, datetime.now(timezone.utc))
     if command == "init":
         state = initialize(payload)
         out.mkdir(parents=True, exist_ok=True)
@@ -405,12 +540,12 @@ def run(command, out, payload=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("init", "event", "status"))
+    parser.add_argument("command", choices=("init", "event", "status", "next"))
     parser.add_argument("out", type=Path)
     parser.add_argument("request", type=Path, nargs="?")
     args = parser.parse_args()
     try:
-        require(args.command == "status" or args.request is not None, "A JSON request file is required")
+        require(args.command in ("status", "next") or args.request is not None, "A JSON request file is required")
         result = run(args.command, args.out, read_json(args.request) if args.request else None)
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
     except (OSError, ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:

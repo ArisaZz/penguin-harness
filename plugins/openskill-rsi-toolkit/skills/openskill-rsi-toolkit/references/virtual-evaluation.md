@@ -20,7 +20,8 @@ contract.json with a stable id and every resource. Put reusable code in scripts/
 and cite references. Resolve resources relative to the skill, not a practice root.
 Execute the task using those skills and the allowed inputs. Generate outputs by
 running the procedures, rather than embedding this task's answer in a Skill.
-Return the skill and output paths, revision hash and commands actually executed.
+Return the skill and output paths, revision hash, commands actually executed,
+start/end timestamps, exit code and raw execution-log paths for the receipt.
 Do not read target scores, tests, rubrics, solutions, old traces or other Cases.
 Do not spawn subagents or change the Target Agent State. Await controller feedback
 before making another revision.
@@ -28,7 +29,7 @@ before making another revision.
 
 The actual task input is permitted during practice, as in the source. "Virtual" describes the independently generated verifier and its supervision, not a requirement to invent unrelated user tasks. Small synthetic inputs and documented examples can add checks when they exercise the same skills. Keep these checks grounded and record that coverage.
 
-On each revision, resume the same creator with `input_subagent`. Supply the structured virtual failures, diagnosis and any gap research. Keep the planned skill count fixed. The creator fixes skills/scripts and re-executes in a clean output directory or restores the input environment first. Use `practice/revision-N/` and register `revision` as `execution.md` describes; the helper preserves each skill revision and hashes its outputs before another attempt. Outputs must come from the recorded skill revision; stale files cannot satisfy a later test. State the proposed correction and observable behavior expected from it, then check that prediction in the next allowed verification.
+On each revision, resume the same creator with `input_subagent`. Supply the recorded feedback, structured virtual failures and any gap research. Keep the planned skill count fixed. The creator fixes skills/scripts and re-executes in a clean output directory or restores the input environment first. Use `practice/revision-N/` and register `revision` with an execution receipt as `execution.md` describes. The helper preserves each skill revision and hashes its outputs before another attempt. Outputs must come from the recorded skill revision; stale files cannot satisfy a later test. State the proposed correction and observable behavior expected from it, then check that prediction in the next allowed verification. Skill repair must change reusable content. An execution/delivery repair with unchanged skills is `repeat_practice` and counts only as another practice execution.
 
 ## Independent verifier
 
@@ -51,8 +52,11 @@ Ask the verifier to:
 6. Save `coverage.json` using `execution.md`'s requirement-to-test format. Include unresolved required checks as `unverified`, even if all implemented assertions pass. Do not omit a diagnostic concern from the coverage map to obtain success. The map and its sources remain verifier evidence outside the deployed library.
 
 Before dispatch, the controller reserves `begin-verification`; after the attempt, it records
-`finish-verification` with the actual exit code and verifier session. An attempt without a
-valid report still spends budget. Execute in the recorded practice environment, using
+`finish-verification` with `execution_status: completed`, the actual pytest exit code and
+verifier session. If pytest did not start or was interrupted, record `not_started` or
+`interrupted` instead, without an exit code. A stale or partial XML cannot establish a valid
+measurement in those states. An attempt without a valid report still spends budget. Execute
+in the recorded practice environment, using
 absolute paths to the newly reserved attempt's report file:
 
 ```bash
@@ -67,7 +71,7 @@ python3 "<skill_dir>/scripts/virtual-results.py" "<fresh_report.xml>" --pytest-e
 
 Do not reuse a previous report if pytest failed to write this one. The parser uses the individual JUnit test cases, excludes skipped tests from the denominator, rejects empty/all-skipped suites, duplicate test identities, errors, inconsistent exit codes and more than 60 tests. `status: ok` means the report is valid, not that the skills passed. Only `passed == total`, valid skill structure and coverage of every required check allow `surrogate_pass`. Optional skips must be justified; skipping a required check prevents that exit even when the numeric rate is 1.
 
-Save the parser's JSON as the virtual measurement. A parser `status: failed` has no `pass_rate`; repair the cause in a separately reserved attempt within the retry/time budget or terminate with a verifier failure. Do not substitute 0 or let an LLM estimate a missing rate. Finalize the attempt only after all logs, diagnoses and coverage are written; the helper seals their hashes. The scripts need only Python's standard library; pytest is needed to produce the report.
+Save the parser's JSON as the virtual measurement. A parser `status: failed` has no `pass_rate`; diagnose it and repair the cause in a separately reserved attempt within the retry/time budget. A verifier-failure stop requires evidence that recovery is unavailable; an invalid first report alone does not establish that. Do not substitute 0 or let an LLM estimate a missing rate. Finalize the attempt only after all logs, diagnoses and coverage are written; the helper seals their hashes. Subsequent controller feedback goes in a separate immutable diagnosis file. The scripts need only Python's standard library; pytest is needed to produce the report.
 
 ## Diagnosis and retrieval
 
@@ -76,29 +80,42 @@ Give a separate classifier call the failed assertions, verifier diagnosis and pr
 - `SELF-FIXABLE`: the needed rule is already known; fix implementation, format, types or indexing.
 - `NEEDS-DR`: a missing domain rule, algorithm choice, reference value or API behavior requires external evidence.
 
-An unavailable or malformed classifier result defaults to `SELF-FIXABLE`, matching the source. If a gap is identified and the Case has searches remaining, sanitize the query as SKILL.md requires and retrieve the missing evidence. Track topics and decrement the search budget on each issued search, including failed requests; this stricter bound is a declared adaptation of upstream's successful-result counter. Never expand the cap to compensate for empty results. Append the findings and citations to the feedback; a gap with no evidence stays unresolved.
+An unavailable or malformed classifier result defaults to `SELF-FIXABLE`, matching the source. This fallback only selects the retrieval policy; it does not erase a failure or permit an unsupported stop. Record a `feedback` event covering every issue returned by `next`, with diagnosis, immutable evidence, proposed recovery and expected observable change:
+
+- `revise_skill`: correct the reusable procedure, calculation, output contract or packaging, then execute it again. A failed assertion with a supported expected value belongs here unless a concrete execution fault explains it.
+- `repair_verifier`: fix test setup/imports/collection, add missing required checks or correct an independently disproven oracle. Preserve valid assertions. An all-passing but incomplete suite needs this work, not immediate success or an automatic failure stop.
+- `repeat_practice`: correct a documented command, path or delivery error and rerun unchanged skills. Do not count it as skill refinement.
+
+When multiple issues coexist, the diagnosis must describe all of them and the recovery must address them before the next attempt. Skill-structure errors require a skill revision. To override an assertion by repairing the verifier, record `oracle_correction` and the independent evidence; creator output is not evidence of a wrong expectation. If a new attempt reveals a different cause, diagnose that new attempt instead of rewriting an earlier sealed diagnosis.
+
+If a gap is identified and the Case has searches remaining, sanitize the query as SKILL.md requires and reserve `targeted-search` before retrieval. Collect each request with `search-result`, source URLs and immutable raw evidence, including unavailable results. Track topics and decrement the search budget on each issued search; this stricter bound is a declared adaptation of upstream's successful-result counter. Never expand the cap to compensate for empty results. Include actual findings and citations in the creator/verifier feedback. An unfilled reservation supplies no knowledge; a gap with no retrieved evidence stays unresolved and cannot authorize a guessed rule. If recovery is unavailable, document that blocker with the failed retrieval evidence.
 
 ## Retry ordering and termination
 
-Use `retries = 0` for the initial draft. The loop is:
+Use the journal's attempts and `next` guidance; never reconstruct counters from memory. The loop is:
 
 ```text
-create skills; execute practice task
-while retries < max_refinement_retries:
-    independently verify current outputs; record tested revision and suite hash
-    if virtual rate == 1 and structure and requirement coverage are complete:
-        stop: surrogate_pass
-    if unrecoverable verifier/environment failure or declared budget reached:
-        stop with that reason, with no invented virtual score
-    diagnose; optionally retrieve missing knowledge within the search cap
-    retries += 1
-    revise in the same creator session; regenerate outputs
-stop: max_refinement_retries
+create skills; execute practice task; register execution receipt
+while verification budget remains and deadline has not passed:
+    reserve attempt; independently verify; record actual execution status and evidence
+    if completed valid rate == 1 and structure and required coverage are complete:
+        finish: surrogate_pass (or time_budget if the deadline has passed)
+    if deadline has passed: finish time_budget
+    diagnose every issue; record feedback and one recovery action
+    if verifier-only repair and verification budget exhausted: finish max_refinement_retries
+    collect required gap research within its existing budget
+    if recovery is unavailable: record cause/evidence and finish with the actual blocker
+    if skill/practice repair: same creator applies it, executes, registers receipt
+    otherwise: correct verifier in the next separately reserved attempt
+if last skill/practice repair completed and verification budget exhausted:
+    finish max_refinement_retries with the final execution marked untested
 export the current skill set if structurally valid, otherwise construction_failed
 ```
 
 Verifier errors and structural failures spend this retry budget too. If only the verifier needs repair, the retry may keep the skill bytes unchanged; record this instead of forcing a useless skill edit. With the source default 3, there are at most three verification attempts and four practice executions; the final revision after the third failed attempt is not re-verified. If the user changes this to an initial verification plus three verified refinements, label it an adaptation and account for the extra verifier call.
 
-The source's internal episode limits are creator 60 / verifier 20, idle 3 / stale 10, with a context warning at 70% and export/stop at 90%. Penguin subagent turns are not Terminus episodes. Enforce the declared wall-time limit (30 minutes per Case by default) from the start of its research, and record that replacement rather than pretending to apply unavailable counters. Check elapsed time between calls and while waiting on background roles; at the deadline, abort the active role with `input_subagent`, stop its practice process, and wait for writes to settle before preserving artifacts. If measured context usage is available, warn at 70% and stop at 90%; do not repeatedly restart a creator to evade the budget. A stalled role or unsupported verifier must end with its reason, never an automatic pass. An invalid current skill set cannot be replaced by an older revision and called the final OpenSkill result.
+The source's internal episode limits are creator 60 / verifier 20, idle 3 / stale 10, with a context warning at 70% and export/stop at 90%. Penguin subagent turns are not Terminus episodes. Enforce the declared wall-time limit (30 minutes per Case by default) from the start of its research, and record that replacement rather than pretending to apply unavailable counters. Read `next` before dispatch and poll background roles with waits no longer than `min(30, remaining_seconds)` seconds. Budget the first draft and first verifier so feedback can still be applied within the existing total; avoid using the whole window on drafting. This scheduling advice grants no extra time or attempts.
 
-At termination record the **current** skill digest, the digest of the last tested skill revision, the most recent valid virtual result and whether it applies to the exported revision. Do not carry a previous revision's pass rate forward. No best-of-N restore, no score-based tie-break, and no target evaluation as a substitute verifier.
+At the actual deadline, abort the active role with `input_subagent`, stop its practice process, and wait for writes to settle before preserving artifacts. The helper does not terminate host processes. Collect pending attempts as completed/interrupted/not-started according to what actually happened. A receipt for practice finished before the deadline can be registered afterward; late work cannot. Do not turn “nearly out of time” into `interrupted` or `verifier_failure`. If measured context usage is available, warn at 70% and stop at 90%; do not repeatedly restart a creator to evade the budget. A stalled role or unsupported verifier must end with concrete cause and recovery evidence, never an automatic pass. An invalid current skill set cannot be replaced by an older revision and called the final OpenSkill result.
+
+At termination record the **current** skill digest, the digest and attempt of the last valid virtual measurement, whether the final practice execution was tested, and any unresolved final issues. `final_was_tested` requires completed execution, a valid report and a saved suite for that practice revision; skill hash equality alone is insufficient. A valid measurement can still contain failed assertions or missing coverage. Report actual skill changes separately from reruns and verifier repairs. Do not carry a previous revision's pass rate forward. No best-of-N restore, no score-based tie-break, and no target evaluation as a substitute verifier.

@@ -64,3 +64,23 @@ final runs, model endpoints and episode counters are still not claimed by the sm
 The Appendix F pass/fail-bit ambiguity described above remains unresolved in the text.
 This implementation continues to admit no GT bit into construction, consistent with §2 and
 the inspected OpenSkill override. No new optimization changes that interpretation.
+
+## Feedback repair in the 2026.10.16.1 Skill
+
+Rechecked [v1 §2.2 and B.3–B.6](https://arxiv.org/html/2606.06741v1) and the pinned
+`openskill_evolution.py::_check_episode_exit`. Failure diagnostics still guide the same
+creator; hidden supervision remains unavailable until freeze. The final failed attempt may
+produce an unverified last revision, with no best-of-N selection or extra verification.
+
+Schema-2 journals add execution receipts, mandatory recovery decisions, retrieval-result
+evidence, explicit verifier execution status and evidenced early stops. Unchanged practice
+reruns and verifier repairs are counted separately from skill changes. These are Penguin
+execution safeguards, not additional learning stages or paper hyperparameters. Requiring
+retrieved evidence before acting on `NEEDS-DR` is stricter than upstream's fallback after
+empty research; an unresolved gap remains explicit. Existing retry/search caps stay unchanged.
+
+Deadline guidance is read-only; the controller still stops processes and checks tool traces.
+Hashes establish byte identity, not causal improvement or correct verifier semantics.
+Existing experiments retain their recorded Skill version; this version does not reinterpret
+their results. The local executable regression checks the feedback-to-revision path, not
+Benchmark performance.
