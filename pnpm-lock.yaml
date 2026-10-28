@@ -128,6 +128,9 @@ importers:
       '@penguinharness/default-rsi-toolkit':
         specifier: workspace:*
         version: link:../../plugins/default-rsi-toolkit
+      '@penguinharness/evo-harness-rsi-toolkit':
+        specifier: workspace:*
+        version: link:../../plugins/evo-harness-rsi-toolkit
       '@penguinharness/goal':
         specifier: workspace:*
         version: link:../../plugins/goal
@@ -240,6 +243,9 @@ importers:
       '@penguinharness/default-rsi-toolkit':
         specifier: workspace:*
         version: link:../../plugins/default-rsi-toolkit
+      '@penguinharness/evo-harness-rsi-toolkit':
+        specifier: workspace:*
+        version: link:../../plugins/evo-harness-rsi-toolkit
       '@penguinharness/goal':
         specifier: workspace:*
         version: link:../../plugins/goal
@@ -355,6 +361,9 @@ importers:
       '@penguinharness/default-rsi-toolkit':
         specifier: workspace:*
         version: link:../../plugins/default-rsi-toolkit
+      '@penguinharness/evo-harness-rsi-toolkit':
+        specifier: workspace:*
+        version: link:../../plugins/evo-harness-rsi-toolkit
       '@penguinharness/goal':
         specifier: workspace:*
         version: link:../../plugins/goal
@@ -897,6 +906,8 @@ importers:
         version: 4.1.12(@types/node@24.13.3)(@vitest/coverage-v8@4.1.12)(jsdom@30.1.2(@noble/hashes@1.8.0))(vite@7.3.7(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))
 
   plugins/default-rsi-toolkit: {}
+
+  plugins/evo-harness-rsi-toolkit: {}
 
   plugins/goal: {}
 
