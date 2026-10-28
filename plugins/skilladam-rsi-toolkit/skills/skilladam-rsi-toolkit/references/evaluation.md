@@ -31,11 +31,21 @@ Keep these measurements together at the following granularity:
 | Training | One record for the complete training run that produces one learned Skill, identified by benchmark/training unit and exported Skill/State version. Include initialization, candidate proposals, accepted and rejected evaluations, and delegated calls within that run. |
 | Test | One record for each benchmark, frozen State, test case and repetition. Keep its score, cost, time and token usage together. |
 
-Each record includes cost in USD, start and finish timestamps, elapsed duration, input tokens, output tokens and total tokens. Include cached-token usage when available, and keep the native trial/session and artifact paths so the measurements can be traced back.
+Each record includes cost in USD, start and finish timestamps, elapsed duration and the token breakdown below. Keep the native trial/session and artifact paths so the measurements can be traced back.
 
-For Harbor, read `agent_result.cost_usd`, `n_input_tokens`, `n_output_tokens` and `n_cache_tokens` when supplied. Total tokens are input plus output; cached tokens are already included in input and are not added again. Use the native trial's start and finish timestamps for elapsed wall-clock duration, with the same timing boundary for Train and Test. Preserve agent-only execution time separately when available.
+| Token metric | Penguin usage |
+| --- | --- |
+| Cached input | `cache_read` in token records, or `cacheRead` in cost summaries: input served from cache hits. |
+| Uncached input | `cache_write` or `cacheWrite`: input on a cache miss. |
+| Output | `output`: thinking and response tokens combined. |
+| Total input | Cached input + uncached input. |
+| Total tokens | Total input + output. |
 
-Sum costs and tokens into separate Train and Test totals, retaining the per-Skill and per-case records. Count each underlying request once: session/model breakdowns and parent/child summaries may describe the same usage. Keep controller and scheduling usage separate from the training and test trials, and include it once in the experiment total.
+For Harbor, read `cost_usd`, `n_input_tokens`, `n_output_tokens` and `n_cache_tokens` from `agent_result` when supplied. These give cost, total input, output and cached input respectively. Derive uncached input as total input minus cached input only when both are available. Penguin's per-session usage artifact, such as `agent/penguin-cost-by-session.json`, retains the original `cacheRead`, `cacheWrite` and `output` breakdown. Cached input is already part of total input; thinking tokens are already part of output. Do not add either twice.
+
+Use the native trial's start and finish timestamps for elapsed wall-clock duration, with the same timing boundary for Train and Test. Preserve agent-only execution time separately when available.
+
+Sum costs and each token category into separate Train and Test totals, retaining the per-Skill and per-case records. Count each underlying request once: session/model breakdowns and parent/child summaries may describe the same usage. Keep controller and scheduling usage separate from the training and test trials, and include it once in the experiment total.
 
 Report summed training durations and summed test durations separately from actual experiment wall-clock time; concurrent trials overlap. Keep failed-attempt usage visible in the totals. Mark missing measurements as unknown (`null` in structured output), and label any partial totals rather than treating missing usage as zero.
 

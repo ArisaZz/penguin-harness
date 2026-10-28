@@ -1,7 +1,7 @@
 ---
 name: skilladam-rsi-toolkit
 description: "Run a SkillAdam experiment on the Project's selected Benchmarks: train once in a continuing Agent Session, freeze the learned Skill, then evaluate it repeatedly on held-out tasks."
-version: 2026.10.28.4
+version: 2026.10.28.5
 ---
 
 # SkillAdam
@@ -63,7 +63,7 @@ Report Train and Test separately for each benchmark, with these records:
 | Versions | The fixed experiment/report version, resolved runtime, benchmark, model and toolkit versions, and each frozen Skill/Agent State version. Prefer user-specified versions. |
 | Cost | Training cost for producing each learned Skill; test cost for every case, repetition and measured State; separate Train/Test totals. |
 | Time | Start, end and elapsed time at the same granularity as cost, with separate Train/Test totals and actual experiment wall-clock time. |
-| Tokens | Input, output and total tokens at the same granularity as cost and time; cached-token usage when available, with separate Train/Test totals. |
+| Tokens | Cached input, uncached input, output, total input and total tokens at the same granularity as cost and time, with separate Train/Test totals. |
 | Test comparison | Test scores for the pre-training base State and final learned State. |
 | Training curve | Actual measured training scores across SkillAdam's optimization iterations, with candidate scores and acceptance decisions. Methods without iterative training scores need no curve. |
 
