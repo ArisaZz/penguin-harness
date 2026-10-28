@@ -19,4 +19,6 @@ Construct one library per training unit, then evaluate the baseline and final St
 
 Reports use shared `baseline`/`final`, repetition, version, score and resource field names. Keep method-specific learning records separate from repeated Test statistics.
 
+Training progress uses numbered `step` labels and retains native stage names for traceability.
+
 OpenSkill retains virtual validation curves separately from Benchmark Train scores. Construction remains closed before target scoring; the final library is the last revision.
