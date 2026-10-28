@@ -1,7 +1,7 @@
 ---
 name: skilladam-rsi-toolkit
 description: "Run a SkillAdam experiment on the Project's selected Benchmarks: learn a reusable Skill from training feedback in a continuing Agent Session, then evaluate the frozen Skill on held-out tasks."
-version: 2026.10.27.2
+version: 2026.10.28.1
 ---
 
 # SkillAdam
@@ -23,7 +23,7 @@ Two persistent states distinguish SkillAdam:
 
 Both states are updated after evaluating a candidate, including rejected candidates. The output is the last accepted Skill. Held-out test feedback never updates it. [The learning instructions](references/training.md) give the equations and iteration order; install them for the training Target.
 
-## Resolve the request
+## Before you start
 
 Find the selected Benchmarks in the current Project, using the Environment's App Data Dir. Read their manifests and Case statements, then follow the linked runtime instructions. Built-in packages contain descriptions and run instructions; fetch task sources and environments when those instructions require them. A request naming the installed Benchmarks is sufficient: the user need not supply a repository link.
 

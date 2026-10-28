@@ -1,0 +1,15 @@
+# SkillAdam RSI toolkit
+
+- **Date:** 2026-10-28
+- **Type:** feature
+- **Scope:** `skills`
+
+[中文版](2026-10-28-skilladam-rsi-toolkit.zh.md)
+
+Added `skilladam-rsi-toolkit` to the plugin library. A controller Penguin reads the selected Project Benchmarks, arranges continuous training, and evaluates frozen Skills on held-out tasks.
+
+## Details
+
+- Added learner instructions for S0 initialization, an evolving issue tracker, a variance-controlled edit budget, and candidate evaluation.
+- Added a numerical helper for optimizer state and Evaluation Center records.
+- Added instructions for independent repetitions, separate Train/Test results, and mean with sample standard deviation.
