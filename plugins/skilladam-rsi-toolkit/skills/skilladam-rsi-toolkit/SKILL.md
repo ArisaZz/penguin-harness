@@ -1,7 +1,7 @@
 ---
 name: skilladam-rsi-toolkit
 description: "Run a SkillAdam experiment on the Project's selected Benchmarks: train once in a continuing Agent Session, freeze the learned Skill, then evaluate it repeatedly on held-out tasks."
-version: 2026.10.28.5
+version: 2026.10.28.7
 ---
 
 # SkillAdam
@@ -54,6 +54,8 @@ You own scheduling. When `run_subagent` is available, workers can launch and col
 Count every container started for this experiment, including network sidecars, toward the user's Docker limit, and respect the benchmark's per-host limit. Leave unrelated workloads unchanged. Keep a short index of completed, active and pending work with artifact paths. A process launch is not a completed measurement; inspect the runner's final result before recording a score.
 
 ## Report the result
+
+Use the [common report fields](references/evaluation.md#common-report-fields): `baseline` and `final` for the two frozen States, `run` for test repetitions, and `mean`, `std` and `final_minus_baseline` for the comparison. Keep training stages separate from test repetitions.
 
 Report Train and Test separately for each benchmark, with these records:
 

@@ -1,0 +1,46 @@
+{
+  "name": "@penguinharness/evo-harness-rsi-toolkit",
+  "version": "2026.10.28-8",
+  "description": "Evo-Harness RSI Toolkit: reflect on negative feedback in the original Solver Session, compile one batch of reusable skills, then freeze and evaluate.",
+  "keywords": [
+    "penguin-plugin",
+    "penguinharness",
+    "skills"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Prism-Shadow/penguin-harness.git",
+    "directory": "plugins/evo-harness-rsi-toolkit"
+  },
+  "files": [
+    "icon.svg",
+    "skills",
+    "!skills/**/test_*.py",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "penguin": {
+    "category": "rsi",
+    "preinstall": false,
+    "title": "Evo-Harness RSI Toolkit",
+    "title_zh": "Evo-Harness 自进化工具包",
+    "description_zh": "按 Evo-Harness 的负反馈反思与批次编译学习技能，通过 Penguin 原生子 Agent、State 和评测协议完成冻结对比。",
+    "short_description": "Compile execution feedback into reusable skills.",
+    "short_description_zh": "从执行反馈按批次编译可复用技能。",
+    "quick_start": {
+      "skills": [
+        "evo-harness-rsi-toolkit"
+      ],
+      "prompt": "Use the selected Benchmark for Evo-Harness RSI, resolve this Project’s experiment settings, and autonomously complete learning, export, freezing and the Base/Skill comparison. Ask once for required missing inputs.",
+      "prompt_zh": "使用指定 Benchmark 进行 Evo-Harness RSI；自动读取本项目已有实验配置，按冻结方法完成学习、导出、Base／Skill 对比和汇总，必要缺项集中询问一次。"
+    },
+    "icon": "icon.svg"
+  },
+  "scripts": {
+    "test": "python3 -B -m unittest discover -s skills/evo-harness-rsi-toolkit/scripts -p \"test_*.py\" -v"
+  }
+}
