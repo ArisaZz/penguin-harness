@@ -55,7 +55,19 @@ For Test, publish one matrix per benchmark/training unit and frozen version, cov
 
 ## Finish the experiment report
 
-For each frozen State, compute one benchmark score per complete test repetition using the benchmark's aggregation rule. Report the mean and sample standard deviation of those repetition scores (denominator R - 1 for R repetitions), preserving the individual scores in the report. For an aggregate across benchmarks on a common scale, average their scores within each test repetition first, then compute mean and sample standard deviation. This measures test execution variation for fixed learned States. Train has one measured learning curve and no across-training-run standard deviation. Keep Train and Test separate.
+For each frozen State, each test repetition includes every selected test case. Apply the benchmark's aggregation rule separately to each repetition. For a benchmark scored by the mean of N test cases, with R test repetitions:
+
+```text
+repeat_score[r] = sum_q score[r, q] / N
+mean = sum_r repeat_score[r] / R
+sample_std = sqrt(sum_r (repeat_score[r] - mean)^2 / (R - 1))
+```
+
+Report `mean ± sample_std` and retain the R repetition scores. For example, three complete-test means of 60, 70 and 80 give `70 ± 10`. The standard deviation measures variation between complete test repetitions of the same frozen State. Calculate this standard deviation from repetition scores, not pooled case scores or an average of per-case standard deviations.
+
+For an aggregate across benchmarks on a common scale, average the same selected benchmarks within each repetition. This gives R overall scores; apply the mean and sample-standard-deviation formulas to those scores. Do not average the benchmarks' standard deviations.
+
+One test repetition has no sample standard deviation. Train has one measured learning curve and no across-training-run standard deviation. Keep Train and Test separate.
 
 Separate the gain from initialization (no Skill to S0) from the gain after optimization (S0 to final). Show rejected candidates separately from the retained-Skill curve. When S0 and final contain identical Skill files, describe any difference between their test scores as variation between repeated measurements.
 

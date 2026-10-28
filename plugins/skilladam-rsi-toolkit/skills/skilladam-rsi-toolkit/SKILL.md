@@ -1,7 +1,7 @@
 ---
 name: skilladam-rsi-toolkit
 description: "Run a SkillAdam experiment on the Project's selected Benchmarks: train once in a continuing Agent Session, freeze the learned Skill, then evaluate it repeatedly on held-out tasks."
-version: 2026.10.28.2
+version: 2026.10.28.3
 ---
 
 # SkillAdam
@@ -55,6 +55,8 @@ Count every container started for this experiment, including network sidecars, t
 
 Report Train and Test separately for each benchmark. Show no-Skill, S0 and final scores, accepted candidates and the single measured retained-Skill training curve. Keep candidate scores and the final training verifier grade as separate records. A curve uses the actual measurement for that iteration, not a cumulative maximum. One training run has no across-run sample standard deviation.
 
-For each frozen State, first calculate the benchmark score for each complete test repetition, then report the mean and **sample standard deviation of those three repetition scores**. This measures variation in repeated testing of a fixed State. For an overall score on a common scale, average benchmarks within each test repetition first. Use the requested repetition count if it differs from three; one repetition has no sample standard deviation. Average all repetitions rather than selecting the best, and do not label this score pass@k.
+For each frozen State, each test repetition covers the complete selected test set. Apply the benchmark's aggregation rule within each repetition; for a mean-score benchmark, average all its test-case scores. Three repetitions give three benchmark scores. Report the mean and **sample standard deviation of those three scores**, measuring variation between test repetitions of the same frozen State.
+
+For an overall score on a common scale, first average the selected benchmarks' scores within repetition 1, and likewise for repetitions 2 and 3. Calculate the mean and sample standard deviation of those three overall scores. Do not average per-case or per-benchmark standard deviations. Use the requested repetition count if it differs from three; one repetition has no sample standard deviation. Average all repetitions rather than selecting the best, and do not label this score pass@k.
 
 Include recorded total cost, elapsed time, incomplete runs, method deviations and paths to the frozen Skills and results. When S0 and final are identical, differences in their independent test scores are measurement variation, not a learned change.
