@@ -137,6 +137,9 @@ importers:
       '@penguinharness/model-development':
         specifier: workspace:*
         version: link:../../plugins/model-development
+      '@penguinharness/openskill-rsi-toolkit':
+        specifier: workspace:*
+        version: link:../../plugins/openskill-rsi-toolkit
       '@penguinharness/opro-rsi-toolkit':
         specifier: workspace:*
         version: link:../../plugins/opro-rsi-toolkit
@@ -249,6 +252,9 @@ importers:
       '@penguinharness/model-development':
         specifier: workspace:*
         version: link:../../plugins/model-development
+      '@penguinharness/openskill-rsi-toolkit':
+        specifier: workspace:*
+        version: link:../../plugins/openskill-rsi-toolkit
       '@penguinharness/opro-rsi-toolkit':
         specifier: workspace:*
         version: link:../../plugins/opro-rsi-toolkit
@@ -364,6 +370,9 @@ importers:
       '@penguinharness/model-development':
         specifier: workspace:*
         version: link:../../plugins/model-development
+      '@penguinharness/openskill-rsi-toolkit':
+        specifier: workspace:*
+        version: link:../../plugins/openskill-rsi-toolkit
       '@penguinharness/opro-rsi-toolkit':
         specifier: workspace:*
         version: link:../../plugins/opro-rsi-toolkit
@@ -917,6 +926,8 @@ importers:
       vitest:
         specifier: ^4.1.12
         version: 4.1.12(@types/node@24.13.3)(@vitest/coverage-v8@4.1.12)(jsdom@30.1.2(@noble/hashes@1.8.0))(vite@7.3.7(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))
+
+  plugins/openskill-rsi-toolkit: {}
 
   plugins/opro-rsi-toolkit: {}
 
@@ -2002,6 +2013,9 @@ packages:
   '@penguinharness/model-development@file:plugins/model-development':
     resolution: {directory: plugins/model-development, type: directory}
 
+  '@penguinharness/openskill-rsi-toolkit@file:plugins/openskill-rsi-toolkit':
+    resolution: {directory: plugins/openskill-rsi-toolkit, type: directory}
+
   '@penguinharness/opro-rsi-toolkit@file:plugins/opro-rsi-toolkit':
     resolution: {directory: plugins/opro-rsi-toolkit, type: directory}
 
@@ -2010,6 +2024,9 @@ packages:
 
   '@penguinharness/skill-porting@file:plugins/skill-porting':
     resolution: {directory: plugins/skill-porting, type: directory}
+
+  '@penguinharness/skilladam-rsi-toolkit@file:plugins/skilladam-rsi-toolkit':
+    resolution: {directory: plugins/skilladam-rsi-toolkit, type: directory}
 
   '@penguinharness/software-development@file:plugins/software-development':
     resolution: {directory: plugins/software-development, type: directory}
@@ -6510,11 +6527,15 @@ snapshots:
 
   '@penguinharness/model-development@file:plugins/model-development': {}
 
+  '@penguinharness/openskill-rsi-toolkit@file:plugins/openskill-rsi-toolkit': {}
+
   '@penguinharness/opro-rsi-toolkit@file:plugins/opro-rsi-toolkit': {}
 
   '@penguinharness/penguin-support@file:plugins/penguin-support': {}
 
   '@penguinharness/skill-porting@file:plugins/skill-porting': {}
+
+  '@penguinharness/skilladam-rsi-toolkit@file:plugins/skilladam-rsi-toolkit': {}
 
   '@penguinharness/software-development@file:plugins/software-development': {}
 
@@ -6592,9 +6613,11 @@ snapshots:
       '@penguinharness/goal': file:plugins/goal
       '@penguinharness/humanizer': file:plugins/humanizer
       '@penguinharness/model-development': file:plugins/model-development
+      '@penguinharness/openskill-rsi-toolkit': file:plugins/openskill-rsi-toolkit
       '@penguinharness/opro-rsi-toolkit': file:plugins/opro-rsi-toolkit
       '@penguinharness/penguin-support': file:plugins/penguin-support
       '@penguinharness/skill-porting': file:plugins/skill-porting
+      '@penguinharness/skilladam-rsi-toolkit': file:plugins/skilladam-rsi-toolkit
       '@penguinharness/software-development': file:plugins/software-development
       '@penguinharness/use-bento-slides': file:plugins/use-bento-slides
       '@penguinharness/use-claude-code': file:plugins/use-claude-code
@@ -6633,9 +6656,11 @@ snapshots:
       '@penguinharness/goal': file:plugins/goal
       '@penguinharness/humanizer': file:plugins/humanizer
       '@penguinharness/model-development': file:plugins/model-development
+      '@penguinharness/openskill-rsi-toolkit': file:plugins/openskill-rsi-toolkit
       '@penguinharness/opro-rsi-toolkit': file:plugins/opro-rsi-toolkit
       '@penguinharness/penguin-support': file:plugins/penguin-support
       '@penguinharness/skill-porting': file:plugins/skill-porting
+      '@penguinharness/skilladam-rsi-toolkit': file:plugins/skilladam-rsi-toolkit
       '@penguinharness/software-development': file:plugins/software-development
       '@penguinharness/use-bento-slides': file:plugins/use-bento-slides
       '@penguinharness/use-claude-code': file:plugins/use-claude-code
@@ -6674,9 +6699,11 @@ snapshots:
       '@penguinharness/goal': file:plugins/goal
       '@penguinharness/humanizer': file:plugins/humanizer
       '@penguinharness/model-development': file:plugins/model-development
+      '@penguinharness/openskill-rsi-toolkit': file:plugins/openskill-rsi-toolkit
       '@penguinharness/opro-rsi-toolkit': file:plugins/opro-rsi-toolkit
       '@penguinharness/penguin-support': file:plugins/penguin-support
       '@penguinharness/skill-porting': file:plugins/skill-porting
+      '@penguinharness/skilladam-rsi-toolkit': file:plugins/skilladam-rsi-toolkit
       '@penguinharness/software-development': file:plugins/software-development
       '@penguinharness/use-bento-slides': file:plugins/use-bento-slides
       '@penguinharness/use-claude-code': file:plugins/use-claude-code
@@ -6711,9 +6738,11 @@ snapshots:
       '@penguinharness/goal': file:plugins/goal
       '@penguinharness/humanizer': file:plugins/humanizer
       '@penguinharness/model-development': file:plugins/model-development
+      '@penguinharness/openskill-rsi-toolkit': file:plugins/openskill-rsi-toolkit
       '@penguinharness/opro-rsi-toolkit': file:plugins/opro-rsi-toolkit
       '@penguinharness/penguin-support': file:plugins/penguin-support
       '@penguinharness/skill-porting': file:plugins/skill-porting
+      '@penguinharness/skilladam-rsi-toolkit': file:plugins/skilladam-rsi-toolkit
       '@penguinharness/software-development': file:plugins/software-development
       '@penguinharness/use-bento-slides': file:plugins/use-bento-slides
       '@penguinharness/use-claude-code': file:plugins/use-claude-code
@@ -6748,9 +6777,11 @@ snapshots:
       '@penguinharness/goal': file:plugins/goal
       '@penguinharness/humanizer': file:plugins/humanizer
       '@penguinharness/model-development': file:plugins/model-development
+      '@penguinharness/openskill-rsi-toolkit': file:plugins/openskill-rsi-toolkit
       '@penguinharness/opro-rsi-toolkit': file:plugins/opro-rsi-toolkit
       '@penguinharness/penguin-support': file:plugins/penguin-support
       '@penguinharness/skill-porting': file:plugins/skill-porting
+      '@penguinharness/skilladam-rsi-toolkit': file:plugins/skilladam-rsi-toolkit
       '@penguinharness/software-development': file:plugins/software-development
       '@penguinharness/use-bento-slides': file:plugins/use-bento-slides
       '@penguinharness/use-claude-code': file:plugins/use-claude-code

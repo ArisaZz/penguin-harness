@@ -11,8 +11,8 @@
 penguin plugin install ./plugins/openskill-rsi-toolkit --project-id <project_id> --json
 ```
 
-升级已安装的同名插件时加 `--overwrite`。这是 Harness 自带的本地插件安装入口，不需要
-修改核心依赖清单。仅复制源码目录不会自动注册成随发行版打包的内置插件。安装后可在
+升级已安装的同名插件时加 `--overwrite`。这是 Harness 自带的本地插件安装入口，适用于
+源码试用。OpenSkill 也已登记到 core、CLI 和桌面端的内置插件依赖中，随 Harness 打包。安装后可在
 插件页面选择 OpenSkill，或在评估中心选择该方法；将技能装到 Optimizer，Target 保持独立。
 
 示例提示词：

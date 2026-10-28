@@ -1,7 +1,7 @@
 ---
 name: openskill-rsi-toolkit
 description: Run OpenSkill (Open-World Self-Evolution for LLM Agents, Yan et al. 2026). Retrieve domain knowledge and verification anchors, refine skills using independent virtual tests without target supervision, freeze the last revision, then evaluate the Target on its Benchmark.
-version: 2026.10.28.3
+version: 2026.10.28.4
 ---
 
 # OpenSkill
@@ -180,6 +180,8 @@ The source checks the failure-retry cap **before** the next verification: after 
 Snapshot and restore exactly as `references/initialization.md` specifies. There is no baseline test before learning, no candidate ranking by target score, and no best-of-N selection. A virtual pass is only a proxy; it does not imply a target pass.
 
 ## Report
+
+Use the [common report fields](references/result-records.md#common-report-fields): `baseline` and `final` for the two frozen States, `run` for test repetitions, and `mean`, `std` and `final_minus_baseline` for the comparison. Keep training stages separate from test repetitions.
 
 Read `references/result-records.md`. Record pre-training base and final Test means, `std`
 and final-minus-baseline gain; both States are measured after freeze. Collect cost in USD,

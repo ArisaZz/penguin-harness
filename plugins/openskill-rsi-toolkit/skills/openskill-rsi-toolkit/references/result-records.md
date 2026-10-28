@@ -13,6 +13,62 @@ records are:
 | Time | Start, finish and elapsed time at those same levels; agent-only duration when available; summed durations separately from actual campaign wall time |
 | Tokens | Cached input, uncached input, output, total input and total tokens at the same levels, with separate Train/Test/controller totals |
 
+## Common report fields
+
+Use these names in the final experiment report so results from different RSI methods can
+be compared. Keep native worker protocols, journals and `scoreboard.yaml` unchanged;
+translate their fields when assembling the report, retaining the original artifacts.
+
+| Field | Meaning |
+| --- | --- |
+| `method` | Toolkit method id: `skilladam`, `evo-harness`, `openskill` or `trace`. |
+| `experiment_version`, `component_versions` | Stable report identity and the actual Harness, runner, Benchmark, model and toolkit versions. User-specified versions take priority. |
+| `benchmark_id`, `training_unit_id` | Published evaluation Benchmark id and the independent unit that produced its learned artifact. Record the paired Train package separately; Train and Test are separate measurements of one experiment. |
+| `phase` | `train`, `test` or `controller` for resource attribution. |
+| `variant` | `baseline` for the pre-training State, `final` for the frozen learned State. Record any requested extra control by its own name. |
+| `run`, `runs` | One-based complete-test repetition index and total repetitions, normally 3. A retry, training iteration or candidate is not another test repetition. |
+| `state_version`, `state_sha256` | Measured frozen State identity; distinct from the experiment version. Map native `version`/`expected_version` here. |
+| `repetition_scores`, `mean`, `std` | Every complete repetition's score, their mean and sample standard deviation with denominator `runs - 1`. One repetition gives `std: null`. |
+| `final_minus_baseline` | Final Test mean minus baseline Test mean, in score units. Calculate from unrounded means. |
+| `case_id`, `score` | Published case id and its measured score in each test repetition. Record the metric, scale and aggregation rule; call it accuracy only when the Benchmark does. |
+| `cost_usd` | Measured USD for this record; native scoreboard `cost` has this unit but its aggregate fields are averages. |
+| `started_at`, `finished_at`, `duration_ms` | Actual UTC timestamps and elapsed milliseconds at the same granularity as cost. |
+| `tokens` | `cached_input`, `uncached_input`, `output`, `total_input` and `total`, in tokens. |
+| `curve_kind` | `benchmark_score` for measured training scores, `virtual_validation` for proxy checks, or `none` when no iterative measurements exist. |
+
+Use `baseline` and `final` in result tables, even when the method calls its learned
+artifact a bank or library. `baseline` describes the State saved before learning; its
+measurement may happen after learning when the method requires that order. Record its
+base configuration and any fixed reader in `baseline_definition`. Do not call it
+“No Skill” if a user-supplied learned Skill was already present. `final` means the
+method's exported result, which may be a training-selected checkpoint rather than the
+last attempted revision. Record that selection separately.
+
+For each Benchmark, and for the equal-weight overall result, include a comparison with
+this shape (illustrative scores):
+
+```json
+{
+  "baseline": { "repetition_scores": [60, 70, 80], "mean": 70, "std": 10 },
+  "final": { "repetition_scores": [75, 80, 85], "mean": 80, "std": 5 },
+  "final_minus_baseline": 10
+}
+```
+
+For a case, compute statistics from its own repetition scores. For a Benchmark, first
+aggregate all selected cases within each repetition; for overall, first average the same
+selected Benchmarks within each repetition. Only then calculate `mean` and `std`.
+Keep full precision until display. These are repeated-test means, not best-of-three or
+pass@3. No intermediate-Skill Test comparison is required.
+
+Retain one resource summary per complete training unit, including all its learned files,
+and one record per Test `benchmark_id × variant × case_id × run`. Keep disjoint controller
+usage and failed-attempt usage, separate Train/Test totals, and actual experiment wall time.
+A library with several Skills has one shared training cost, not a repeated charge per file.
+Missing measurements remain `null`; label incomplete totals. Keep the method's own training
+stages and diagnostics alongside these common fields, without pooling virtual rates,
+training scores or optimizer variance into Test `std`.
+
 ## Fix the record before launch
 
 Add these fields to the executor configuration; replace the examples with actual values:
@@ -63,6 +119,7 @@ and the final-minus-baseline gain. The helper also retains repetition-wise diffe
 pairing repetition indices does not imply shared random seeds or a causal significance test.
 
 OpenSkill's construction has no official Train accuracy or target-score optimization curve.
+Set `curve_kind: virtual_validation`.
 Keep `training.benchmark_score_curve`, `accuracy` and `std` null with the explanation. Do not
 enable `/api/judge`, grade saved Train answers or introduce a target score to fill these fields.
 `training.units[].virtual_curve` contains actual virtual-test rates (`0..1`), acceptance and
@@ -180,6 +237,11 @@ virtual curves, and emits separate Train/Test/controller and experiment totals. 
 the supplied ledger for provenance. Retain each regenerated report and its ledger hash.
 The `scoreboard_record` stays in the host's existing shape; detailed versions/tokens belong
 in the report. Publish as `experiment-organization.md` specifies.
+
+For the common comparison, use the helper's `comparison.baseline` and `comparison.final`,
+and take `comparison.final_minus_baseline.mean` as the scalar `final_minus_baseline`.
+Keep its paired-difference statistics in the method's detailed report. `std` and
+`sample_std` name the same quantity there; use `std` in shared tables.
 
 For a campaign, add `"measurements": "measurements.json"` to each entry of its experiment
 manifest. The aggregate command checks disjoint usage across units and emits resource totals
