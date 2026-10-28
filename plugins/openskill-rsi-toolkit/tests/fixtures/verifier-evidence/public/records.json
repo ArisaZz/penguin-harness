@@ -1,6 +1,0 @@
-{
-  "amounts": [12, 8, -3],
-  "users": ["reviewer-a", "reviewer-b"],
-  "allowed_permissions": ["view", "edit", "upload_only"],
-  "diagnostics": { "latency_ms": 142.8 }
-}

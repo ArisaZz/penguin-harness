@@ -8,9 +8,6 @@
     "skills"
   ],
   "license": "Apache-2.0",
-  "scripts": {
-    "test": "python3 -B -m unittest discover -s tests -v"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Prism-Shadow/penguin-harness.git",

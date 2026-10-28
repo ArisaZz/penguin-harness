@@ -65,12 +65,3 @@ Baseline 是训练前保存、冻结后才测分的 State。Benchmark 将指标�
 
 运行需要 Linux、Docker、Python 3.11+、Node 24+、完整的当前 Penguin core SDK，以及已配置的模型。
 实践镜像必须经过隔离检查。该插件不会修改已有实验、Benchmark 题目或评分规则。
-
-## 验证
-
-```bash
-python3 -B -m unittest discover -s plugins/openskill-rsi-toolkit/tests -v
-```
-
-涉及真实 SDK 和 Docker 的测试需要本地已构建的 core 与可用 Docker；
-`OPENSKILL_TEST_SDK` 可指定完整 SDK 的 `dist/index.js`。测试使用脚本化模型，不消耗付费模型请求。

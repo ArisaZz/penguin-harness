@@ -1,7 +1,7 @@
 ---
 name: openskill-rsi-toolkit
 description: Run OpenSkill (Open-World Self-Evolution for LLM Agents, Yan et al. 2026). Retrieve domain knowledge and verification anchors, refine skills using independent virtual tests without target supervision, freeze the last revision, then evaluate the Target on its Benchmark.
-version: 2026.10.28.4
+version: 2026.10.28.5
 ---
 
 # OpenSkill
@@ -155,12 +155,6 @@ across verifier repairs. A passing output suite cannot erase an observed interfa
 send the evidenced finding to the same creator and independently test the changed behavior.
 This controller review is a Penguin adaptation and remains within the Case deadline.
 It is not an automatic semantic audit or a requirement to produce at least one revision.
-
-For implementation changes, first run the offline acceptance gate and read-only protocol
-replay described in `references/verifier-regression.md`. The gate must pass without skipped
-tests before a separately authorized live pilot. A model-backed verifier replay is available
-when model behavior needs investigation. Development artifacts never enter a new formal
-construction run, and stopped experiments remain immutable.
 
 After an unsuccessful verification or a review with unresolved skill findings, record `feedback` before continuing. Cover all observed assertion failures, skill findings, verifier errors and coverage gaps. Distinguish `SELF-FIXABLE` from `NEEDS-DR`; a classifier failure defaults to `SELF-FIXABLE`. Specify evidence, diagnosis, expected observable change and one action: `revise_skill`, `repair_verifier`, `repeat_practice` or, when eligible, `finish_evidence_limited`. Real assertion failures normally require skill repair; an oracle correction needs independent evidence. Unknown rules alone neither prove a skill defect nor require repeated verifier repairs. If tests pass but the controller observes a concrete skill defect, record it in the skill review and attach the active `skill_findings` to feedback. Never fabricate a failed test or a cosmetic edit to demonstrate RSI.
 
