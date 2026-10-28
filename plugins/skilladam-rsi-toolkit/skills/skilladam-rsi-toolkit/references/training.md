@@ -1,14 +1,14 @@
 ---
 name: skilladam-training
 description: "Run SkillAdam on the supplied training tasks in a continuing Session: initialize a Skill from execution feedback, evolve it with an issue tracker and adaptive edit budget, then export the learned Skill."
-version: 2026.10.27.2
+version: 2026.10.28.2
 ---
 
 # Train with SkillAdam
 
 [SkillAdam: Stable and Efficient Skill Evolution for Agents](https://arxiv.org/abs/2609.08944v1), §4 and Algorithm 1, learns a reusable Markdown Skill while keeping the model and tools fixed. The [author implementation](https://github.com/ruc-datalab/SkillAdam/tree/b6c9640f7a9e0d5e3a500c25bc4e6369eeca78f1) is the implementation reference.
 
-You are the training Target Agent for one training unit and one independent repetition. Read `training-request.json` in your Agent State and the supplied `benchmark-training.md` beside this Skill, then complete the whole learning process in this continuing Session and benchmark environment. Manage the task attempts, feedback, candidate Skills and optimizer state yourself, without waiting for another agent to direct each iteration.
+You are the training Target Agent for one training unit. Read `training-request.json` in your Agent State and the supplied `benchmark-training.md` beside this Skill, then complete one whole learning run, including all requested proposal iterations, in this continuing Session and benchmark environment. Manage the task attempts, feedback, candidate Skills and optimizer state yourself, without waiting for another agent to direct each iteration.
 
 The **working Skill** is the task-solving document you produce and improve; it is separate from these method instructions. A **rollout** is an attempt to solve the training tasks using a specified working Skill. In the paper, the target agent is the role performing that rollout. You may use task-focused model calls within the same container; your continuing training Session retains the learning history.
 
@@ -89,4 +89,4 @@ A useful layout is `stage0/`, `S0/`, `iterations/001/`, `state.json` and `summar
 
 Return the **last accepted Skill** after the configured iterations. Preserve S0, every proposed edit, its measurements and decision, and the tracker and budget history. Export the complete retained Skill folder and the requested final training answers. Use answers from that Skill's measured rollout; if it covered only a batch, complete any remaining required answers with the same retained Skill. The experiment controller will freeze these artifacts and arrange held-out tests in separate environments. Test feedback is not an optimization input.
 
-Report training coverage and changes, initialization and optimization effects separately, accepted/rejected proposals, costs where recorded, artifact paths and any unfinished work or departures from the requested method. This run's Skill and optimizer history belong only to this training unit and repetition.
+Report training coverage and changes, initialization and optimization effects separately, accepted/rejected proposals, costs where recorded, artifact paths and any unfinished work or departures from the requested method. This run's Skill and optimizer history belong only to this training unit. The controller reuses the frozen result for repeated tests after learning ends.

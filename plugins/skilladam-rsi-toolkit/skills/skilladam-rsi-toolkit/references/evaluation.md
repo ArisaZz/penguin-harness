@@ -1,12 +1,12 @@
 # Run workers and collect measurements
 
-The benchmark supplies the evaluator and defines its Train/Test splits. Use its measured scores and execution evidence throughout. The controller schedules whole training runs and independent test tasks; inner SkillAdam iterations stay inside the training Target's Session.
+The benchmark supplies the evaluator and defines its Train/Test splits. Use its measured scores and execution evidence throughout. The controller schedules one whole training run per benchmark or independent training unit, then three test repetitions of each frozen State by default. Inner SkillAdam iterations stay inside the training Target's Session.
 
 ## The launch worker
 
-Receive the experiment root, benchmark, training unit, repetition, phase, published case ID if applicable, native task path, resolved checkout, State archive and identity, runtime, optional install bundle and unique output path from the controller. Resolve the selected benchmark's launch instructions through [benchmark.md](benchmark.md).
+Receive the experiment root, benchmark, training unit, phase, test repetition index when testing, published case ID if applicable, native task path, resolved checkout, State archive and identity, runtime, optional install bundle and unique output path from the controller. Resolve the selected benchmark's launch instructions through [benchmark.md](benchmark.md).
 
-A training worker runs one complete learning trial. A test worker runs one held-out question using the specified frozen State. Neither changes the experiment or launches another experiment controller.
+A training worker runs one complete learning trial. A test worker runs one held-out question in one test repetition using the specified frozen State. Neither changes the experiment or launches another experiment controller.
 
 Wait for completion using the available managed background mechanism, then return the status and exact trial/artifact paths. A launched process or an idle Agent is not by itself a completed trial. Use the native result to distinguish completion, interruption and infrastructure failure.
 
@@ -18,7 +18,7 @@ For a scored Harbor trial, take reward from the trial's `verifier_result.rewards
 
 For training, collect the final answer grades from the benchmark's documented result artifacts. Each continuous learning trial contributes its cost and duration once. Read no-Skill, S0, current/candidate scores, decisions and optimizer history from the learner's indexed records for the learning curve. Use the same display scale as Test while retaining the raw values. Keep online measurements distinct from the final verifier grade.
 
-For Test, gather every requested case for each frozen version and repetition. All versions use the same task set, base State, model, tools and scoring conditions; each trial begins with a fresh environment and conversation. Test feedback never revises a learned Skill.
+For Test, gather every requested case in each of the three repetitions for every frozen version. All repetitions of a version use the same State archive and digest. All versions use the same task set, base State, model, tools and scoring conditions; each trial begins with a fresh environment and conversation. Test feedback never revises a learned Skill. With N held-out cases and three comparison States, three test repetitions require 9N task trials; training is performed once.
 
 Reconcile the experiment index with native trial results, matching each score to the case and frozen State actually evaluated. Keep failed or superseded attempts separately, with their costs and reasons. In progress reports, show completed coverage and compare versions only on their shared completed cases.
 
@@ -49,16 +49,16 @@ python3 "$TOOLKIT/scripts/skilladam.py" report \
 
 Append the returned record under `evaluations` in that Benchmark's scoreboard and preserve existing records. Only complete matrices are published; incomplete work stays visible in the experiment index.
 
-A combined training task may be **one published Train case** containing several questions. Map it as the selected benchmark declares, measured using the initial learner State. Its final grade is not an independent evaluation of a frozen candidate Skill. Keep the inner learning curve in the experiment output rather than inventing separate Harbor trial identities for its questions.
+A combined training task may be **one published Train case** containing several questions. Map it as the selected benchmark declares, measured using the initial learner State, with `runs: 1`. Its final grade is not an independent evaluation of a frozen candidate Skill. Keep the inner learning curve in the experiment output rather than inventing separate Harbor trial identities for its questions.
 
-For Test, publish one matrix per benchmark/training unit, independent repetition and frozen version, covering its held-out cases. Different repetitions have independently learned Skills and therefore different State snapshots. Do not combine those States into one matrix. The matrix's `runs` means repeated evaluation of the same State, not independently repeated training.
+For Test, publish one matrix per benchmark/training unit and frozen version, covering every held-out case with `runs: 3` by default. Each case has cells with `run: 1`, `run: 2` and `run: 3`, all measured from the same frozen State. No-Skill, S0 and final each have their own matrix. If the request changes the test repetition count, use that count in both the matrix and its spec.
 
 ## Finish the experiment report
 
-Compute each benchmark's results from complete per-case data using its aggregation rule. Across independent training repetitions, report mean and sample standard deviation, as the main Skill describes. Keep paired no-Skill/S0/final changes and training curves alongside these summaries.
+For each frozen State, compute one benchmark score per complete test repetition using the benchmark's aggregation rule. Report the mean and sample standard deviation of those repetition scores (denominator R - 1 for R repetitions), preserving the individual scores in the report. For an aggregate across benchmarks on a common scale, average their scores within each test repetition first, then compute mean and sample standard deviation. This measures test execution variation for fixed learned States. Train has one measured learning curve and no across-training-run standard deviation. Keep Train and Test separate.
 
 Separate the gain from initialization (no Skill to S0) from the gain after optimization (S0 to final). Show rejected candidates separately from the retained-Skill curve. When S0 and final contain identical Skill files, describe any difference between their test scores as variation between repeated measurements.
 
 The Evaluation Center's cost and duration fields are averages, not experiment totals. Calculate total cost separately from the native trials and recorded controller/worker usage, counting each underlying model run once; do not add child usage again when a parent total already includes it. Mark unavailable costs as unknown. Record actual wall-clock time separately from summed trial durations.
 
-Keep frozen State archives, source identities, per-case results and artifact paths with the report. Save both a readable summary and structured scores, and deliver the results in the user's requested format. Continue scheduling until every requested training run and corresponding test set is accounted for; report a concrete blocker when completion is impossible.
+Keep frozen State archives, source identities, per-case results and artifact paths with the report. Save both a readable summary and structured scores, and deliver the results in the user's requested format. Continue scheduling until training and every requested test repetition are accounted for; report a concrete blocker when completion is impossible.

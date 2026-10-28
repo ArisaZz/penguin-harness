@@ -13,4 +13,4 @@ Added `skilladam-rsi-toolkit` to the plugin library. A controller Penguin reads 
 
 - Added learner instructions for S0 initialization, an evolving issue tracker, a variance-controlled edit budget, and candidate evaluation.
 - Added a numerical helper for optimizer state and Evaluation Center records.
-- Added instructions for independent repetitions, separate Train/Test results, and mean with sample standard deviation.
+- Added a train-once protocol with three test repetitions of each frozen State by default, separate Train/Test results, and test repetition means with sample standard deviation.

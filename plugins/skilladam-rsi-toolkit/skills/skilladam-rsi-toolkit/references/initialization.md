@@ -1,14 +1,14 @@
 # Prepare the experiment
 
-Resolve the Project from the current Penguin Environment's App Data Dir. Use the host and output directory named by the user; otherwise use this Session's workspace or scratchpad. Record the selected packages, task sources, runtime, repetitions, learning parameters, comparison versions and resource limits in a short experiment record.
+Resolve the Project from the current Penguin Environment's App Data Dir. Use the host and output directory named by the user; otherwise use this Session's workspace or scratchpad. Record the selected packages, task sources, runtime, one training run per training unit, test repetitions (default: three), learning parameters, comparison versions and resource limits in a short experiment record.
 
 ## Runtime and directories
 
 Read the selected Case statements and benchmark instructions. They specify Docker, Harbor or another runner, its adapter, model configuration, task paths and artifact collection. Reuse the current CLI and configured model connection. Follow the benchmark's installation procedure for the Target; a source build is described in [source-bundle.md](source-bundle.md) when required. The adapter copies credentials privately; keep them out of prompts and experiment records.
 
-Use a separate directory for each benchmark and repetition, with its own State archives, jobs, frozen Skills and results. Keep a launch index so the controller can resume collection after context compaction. Keep task source and grading implementation unchanged during the experiment. Benchmark source is fetched once per experiment from the link in the installed package; an existing unrelated checkout is not an input.
+Use a separate directory for each benchmark or independent training unit, with one set of frozen State archives and learning records. Give test outputs distinct paths by State, repetition and case. Keep a launch index so the controller can resume collection after context compaction. Keep task source and grading implementation unchanged during the experiment. Benchmark source is fetched once per experiment from the link in the installed package; an existing unrelated checkout is not an input.
 
-Before launching repeated runs, verify that a training attempt can obtain the evaluator feedback required by SkillAdam. A reachable business service alone does not confirm that training feedback is available.
+Before starting training, verify that a training attempt can obtain the evaluator feedback required by SkillAdam. A reachable business service alone does not confirm that training feedback is available.
 
 Inspect active runs without changing ownership or permissions on their mounted log directories. Organize a completed trial's artifacts after its runner exits, so collection does not interrupt another trial's logging.
 
@@ -33,7 +33,7 @@ Copy the base, then install:
 | `references/training.md` | `skills/skilladam-training/SKILL.md` |
 | `scripts/skilladam.py` | `skills/skilladam-training/scripts/skilladam.py` |
 
-Add `training-request.json` at the State root. It contains this run's benchmark, training cases, repetition, seed, batch rule, proposal iterations, optimizer parameters, acceptance rule, runtime and export locations. Resolve these values from the experiment; do not make the learner infer them from other runs.
+Add `training-request.json` at the State root. It contains this run's benchmark, training unit and cases, training sampling seed, batch rule, proposal iterations, optimizer parameters, acceptance rule, runtime and export locations. Test repetition indices belong to the controller's test schedule and do not create additional training requests.
 
 Write `skills/skilladam-training/benchmark-training.md` from the selected benchmark's learner-facing instructions: where training inputs and tools are, how to request feedback, what the score means, and where to export answers, S0, the final Skill and learning records. Include the selected training material; held-out questions and repository grader files do not belong in this brief.
 
@@ -60,7 +60,7 @@ installed in your Agent State, read its SKILL.md and relevant supporting
 files before substantive task actions, and apply it to this task.
 ```
 
-Keep each State frozen during measurement and record its version and digest. Preserve existing snapshots; distinct States of the same Agent use distinct versions.
+Keep each State frozen during measurement and record its version and digest. Reuse the same archive for all three test repetitions of that State, restoring it into a fresh environment and conversation for each case. Test outputs stay outside the frozen archive. Preserve existing snapshots; distinct States of the same Agent use distinct versions.
 
 ## State handoff
 
