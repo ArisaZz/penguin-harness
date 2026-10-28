@@ -24,6 +24,7 @@ translate their fields when assembling the report, retaining the original artifa
 | `started_at`, `finished_at`, `duration_ms` | Actual UTC timestamps and elapsed milliseconds at the same granularity as cost. |
 | `tokens` | `cached_input`, `uncached_input`, `output`, `total_input` and `total`, in tokens. |
 | `curve_kind` | `benchmark_score` for measured training scores, `virtual_validation` for proxy checks, or `none` when no iterative measurements exist. |
+| `step`, `native_stage` | Zero-based training record order and optional original stage label. `step` is independent of the Test repetition `run`; `native_stage` maps back to original artifacts. |
 
 Use `baseline` and `final` in result tables, even when the method calls its learned
 artifact a bank or library. `baseline` describes the State saved before learning; its
@@ -32,6 +33,12 @@ base configuration and any fixed reader in `baseline_definition`. Do not call it
 “No Skill” if a user-supplied learned Skill was already present. `final` means the
 method's exported result, which may be a training-selected checkpoint rather than the
 last attempted revision. Record that selection separately.
+
+Display training progress as `Step 0`, `Step 1`, and so on, with the recorded State or
+artifact version. Keep method-specific names such as `S0`, `H1` and `B0` in `native_stage`
+or raw records. A step orders observed training stages; it does not imply a new accepted
+State or an improvement. Preserve current/candidate scores, acceptance decisions and
+regressions where the method has them. When `curve_kind` is `none`, do not invent a curve.
 
 For each Benchmark, and for the equal-weight overall result, include a comparison with
 this shape (illustrative scores):
