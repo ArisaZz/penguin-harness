@@ -2,11 +2,13 @@
 
 Resolve the Project from the current Penguin Environment's App Data Dir. Use the host and output directory named by the user; otherwise use this Session's workspace or scratchpad. Record the selected packages, task sources, runtime, one training run per training unit, test repetitions (default: three), learning parameters, comparison versions and resource limits in a short experiment record.
 
+Use the user's experiment/report version when supplied; otherwise assign a stable version before launch and include it in every progress and final report. Resolve component versions with the same priority: user-specified versions first, otherwise compatible versions selected from the environment and benchmark instructions. Record the Harness and runner versions, benchmark package version and resolved source revision, provider/model identifier and thinking level, and toolkit version. Record a concrete model revision when exposed by the provider; otherwise retain the actual model identifier. Keep this configuration fixed throughout the experiment and add each Skill/Agent State version and digest when it is frozen.
+
 ## Runtime and directories
 
 Read the selected Case statements and benchmark instructions. They specify Docker, Harbor or another runner, its adapter, model configuration, task paths and artifact collection. Reuse the current CLI and configured model connection. Follow the benchmark's installation procedure for the Target; a source build is described in [source-bundle.md](source-bundle.md) when required. The adapter copies credentials privately; keep them out of prompts and experiment records.
 
-Use a separate directory for each benchmark or independent training unit, with one set of frozen State archives and learning records. Give test outputs distinct paths by State, repetition and case. Keep a launch index so the controller can resume collection after context compaction. Keep task source and grading implementation unchanged during the experiment. Benchmark source is fetched once per experiment from the link in the installed package; an existing unrelated checkout is not an input.
+Use a separate directory for each benchmark or independent training unit, with one set of frozen State archives and learning records. Give test outputs distinct paths by State, repetition and case. Keep a launch index so the controller can resume collection after context compaction. Keep task source and grading implementation unchanged during the experiment. Fetch benchmark source once at the requested version, or resolve the installed package's link when no version was requested; an existing unrelated checkout is not an input.
 
 Before starting training, verify that a training attempt can obtain the evaluator feedback required by SkillAdam. A reachable business service alone does not confirm that training feedback is available.
 
@@ -35,7 +37,7 @@ Copy the base, then install:
 
 Add `training-request.json` at the State root. It contains this run's benchmark, training unit and cases, training sampling seed, batch rule, proposal iterations, optimizer parameters, acceptance rule, runtime and export locations. Test repetition indices belong to the controller's test schedule and do not create additional training requests.
 
-Write `skills/skilladam-training/benchmark-training.md` from the selected benchmark's learner-facing instructions: where training inputs and tools are, how to request feedback, what the score means, and where to export answers, S0, the final Skill and learning records. Include the selected training material; held-out questions and repository grader files do not belong in this brief.
+Write `skills/skilladam-training/benchmark-training.md` from the selected benchmark's learner-facing instructions: where training inputs and tools are, how to request feedback, what the score means, and where to export answers, the final Skill and learning records. Include the selected training material; held-out questions and repository grader files do not belong in this brief.
 
 Add a short reader instruction to the training State's `AGENTS.md`:
 
@@ -50,7 +52,7 @@ The training Target receives learner instructions, not the outer experiment-cont
 
 ## The test States
 
-After training, identify S0 and the last accepted Skill from the learning records. Preserve their complete folders. Starting from the original base, prepare one no-Skill State, one with S0 and one with the final Skill. Test States receive neither training method instructions nor optimizer history, training answers or conversations.
+After training, identify the last accepted Skill from the learning records and preserve its complete folder. Prepare two test States: the pre-training base, without a learned Skill unless the user supplied one, and the same base with the final Skill. Test States receive neither training method instructions nor optimizer history, training answers or conversations.
 
 Use the same reader instruction in all test States:
 
@@ -71,4 +73,4 @@ tar --exclude=./.vault.toml --exclude=./memory --exclude=./schedule \
   -czf "$STATE_TAR" -C "$STATE_DIR" .
 ```
 
-The executable installation and the Agent State are separate inputs. Pass the frozen archive to the adapter using the argument documented by the benchmark. Verify that the exported S0/final Skill reaches its corresponding test State before launching tests.
+The executable installation and the Agent State are separate inputs. Pass the frozen archive to the adapter using the argument documented by the benchmark. Verify that each requested learned Skill reaches its corresponding test State before launching tests.

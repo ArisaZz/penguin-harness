@@ -8,4 +8,4 @@ Build the CLI and its workspace dependencies with the repository's package manag
 
 Check the adapter's current expected archive layout and launcher path before packaging. Keep symlinks within the bundle and verify its CLI without relying on host-side dependencies. Record the source revision, local changes, runtime versions and bundle digest in the experiment record. Keep credentials and Agent States outside the executable bundle.
 
-Pass the archive using the adapter's documented `install_bundle` option. Reuse it for every trial; there is no need to rebuild it for candidate Skill edits. The learner instructions and frozen S0/final Skills remain separate State archives.
+Pass the archive using the adapter's documented `install_bundle` option. Reuse it for every trial; there is no need to rebuild it for candidate Skill edits. The learner instructions and requested frozen test States travel in separate State archives.

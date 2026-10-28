@@ -14,7 +14,7 @@ Resolve:
 
 A package may contain one Train Case that includes several questions, and several independent Test Cases. Read that mapping explicitly. Do not derive it from an old task-group name or assume every directory is an independent training trial.
 
-When statements link a source repository, fetch the indicated branch, tag or commit once and record the resolved revision. Use that checkout throughout the experiment so jobs do not receive different task revisions.
+When statements link a source repository, prefer the user's requested source version; otherwise use the indicated branch, tag or commit. Fetch it once and record the resolved revision. Use that checkout throughout the experiment so jobs do not receive different task revisions.
 
 ## Launch and collect
 

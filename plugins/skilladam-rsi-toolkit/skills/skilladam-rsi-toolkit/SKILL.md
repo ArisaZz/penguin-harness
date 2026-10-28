@@ -1,7 +1,7 @@
 ---
 name: skilladam-rsi-toolkit
 description: "Run a SkillAdam experiment on the Project's selected Benchmarks: train once in a continuing Agent Session, freeze the learned Skill, then evaluate it repeatedly on held-out tasks."
-version: 2026.10.28.3
+version: 2026.10.28.4
 ---
 
 # SkillAdam
@@ -14,7 +14,7 @@ The **Target Agent** is the Penguin that learns or solves tasks inside the bench
 
 [SkillAdam: Stable and Efficient Skill Evolution for Agents](https://arxiv.org/abs/2609.08944v1), §4 and Algorithm 1, optimizes a Markdown Skill while keeping the model and tools fixed. The [author implementation](https://github.com/ruc-datalab/SkillAdam/tree/b6c9640f7a9e0d5e3a500c25bc4e6369eeca78f1) is the implementation reference.
 
-First, the learner attempts training tasks without a learned Skill. It uses those trajectories and evaluator feedback to write S0. Each subsequent iteration runs the current Skill, proposes an edit, and evaluates the candidate on the same training cases. The benchmark's acceptance rule decides whether to retain the edit.
+First, the learner attempts training tasks without a learned Skill. It uses those trajectories and evaluator feedback to write an initial Skill. Each subsequent iteration runs the current Skill, proposes an edit, and evaluates the candidate on the same training cases. The benchmark's acceptance rule decides whether to retain the edit.
 
 Two persistent states distinguish SkillAdam:
 
@@ -35,6 +35,8 @@ Resolve the remaining settings from the request and benchmark instructions:
 - Training units, initialization cases, batch size, training sampling seed, proposal iterations and test repetitions (default: three).
 - Acceptance metrics, optimizer parameters, comparison versions, time limits and Docker capacity.
 
+Fix an experiment/report version before launching. Prefer the user's specified versions; otherwise select and record the resolved versions of the runtime, benchmark, model and toolkit. Keep that configuration fixed through training and testing, and identify each measured Skill and Agent State by its frozen version.
+
 Use all Train and Test questions unless the request selects a subset. Each independent benchmark or training unit learns its own Skill once from the common base State. Freeze that result and reuse it for all test repetitions. Keep the runtime fixed across comparisons and each benchmark's learned state separate.
 
 The numerical helper defaults are `beta2=0.9`, `base_budget=4`, `min_budget=1`, `variance_cap=0.1`; the budget counts unified-diff hunks. Its default gate is strict improvement of mean normalized reward, without a per-case regression threshold. Use that gate when it matches the benchmark's declared rule; otherwise apply that rule and use the helper only for volatility and budget calculations. The dataset, test repetition count and proposal iteration count are experiment settings, not properties of SkillAdam.
@@ -43,9 +45,9 @@ The numerical helper defaults are `beta2=0.9`, `base_budget=4`, `min_budget=1`, 
 
 1. **Prepare.** Follow [initialization](references/initialization.md): record the resolved plan, make a common base State, and prepare one training State per benchmark or independent training unit. Reuse the selected runtime; [source builds](references/source-bundle.md) are only needed when the experiment requires one.
 2. **Train once.** Launch the benchmark's continuous training entry point. Give its Target the learner instructions, helper and training brief through the supported State handoff. Complete all requested proposal iterations inside that Session and container; a candidate update does not create another Harbor trial.
-3. **Collect and freeze.** Collect S0, the last accepted Skill, answers, measured scores, decisions and optimizer history. Freeze complete Skill folders, including supporting files. If no candidate was accepted, final is S0.
-4. **Test repeatedly.** Build no-Skill, S0 and final States from the same base, unless the request names other comparisons. Add only the corresponding frozen Skill and its reader instruction. Evaluate each State on the complete held-out set three times by default. Every case and repetition starts from that State in a fresh environment and conversation, with the same model, thinking level, tools and scoring conditions. Reuse the frozen archive; do not retrain or carry answers, memory or conversation history between test attempts.
-5. **Report.** Follow [evaluation and reporting](references/evaluation.md). Collect native results, the training curve, costs and elapsed time; publish to the Project's Evaluation Center when applicable.
+3. **Collect and freeze.** Collect the last accepted Skill, answers, measured scores, decisions and optimizer history. Freeze the complete Skill folder, including supporting files. If no candidate was accepted, the initial Skill is the final result.
+4. **Test repeatedly.** Evaluate the pre-training base State and the final learned State on the complete held-out set three times each by default. The base has no learned Skill unless the user supplied one. Build the final test State from the same base, adding only the frozen Skill and its reader instruction. Every case and repetition starts from the corresponding State in a fresh environment and conversation, with the same model, thinking level, tools and scoring conditions. Reuse the frozen archives; do not retrain or carry answers, memory or conversation history between test attempts.
+5. **Report.** Follow [evaluation and reporting](references/evaluation.md). Collect native results, versions, the training curve, costs, elapsed time and token usage; publish to the Project's Evaluation Center when applicable.
 
 You own scheduling. When `run_subagent` is available, workers can launch and collect trials: one training worker owns a whole learning run, and a test worker owns one held-out case in one test repetition. Give each trial a separate working directory and output path. A worker does not start another experiment controller. Use the supported background mechanism, retain job identifiers, collect completions and fill available capacity until the requested work is done.
 
@@ -53,10 +55,22 @@ Count every container started for this experiment, including network sidecars, t
 
 ## Report the result
 
-Report Train and Test separately for each benchmark. Show no-Skill, S0 and final scores, accepted candidates and the single measured retained-Skill training curve. Keep candidate scores and the final training verifier grade as separate records. A curve uses the actual measurement for that iteration, not a cumulative maximum. One training run has no across-run sample standard deviation.
+Report Train and Test separately for each benchmark, with these records:
+
+| Record | Required detail |
+| --- | --- |
+| Scores | Test `mean` and `std`, calculated across repetitions as below, with the underlying per-case scores. Report single-run training scores without an across-run standard deviation. |
+| Versions | The fixed experiment/report version, resolved runtime, benchmark, model and toolkit versions, and each frozen Skill/Agent State version. Prefer user-specified versions. |
+| Cost | Training cost for producing each learned Skill; test cost for every case, repetition and measured State; separate Train/Test totals. |
+| Time | Start, end and elapsed time at the same granularity as cost, with separate Train/Test totals and actual experiment wall-clock time. |
+| Tokens | Input, output and total tokens at the same granularity as cost and time; cached-token usage when available, with separate Train/Test totals. |
+| Test comparison | Test scores for the pre-training base State and final learned State. |
+| Training curve | Actual measured training scores across SkillAdam's optimization iterations, with candidate scores and acceptance decisions. Methods without iterative training scores need no curve. |
+
+Keep candidate scores and the final training verifier grade as separate records. A curve uses the actual measurement for that iteration, not a cumulative maximum. One training run has no across-run sample standard deviation.
 
 For each frozen State, each test repetition covers the complete selected test set. Apply the benchmark's aggregation rule within each repetition; for a mean-score benchmark, average all its test-case scores. Three repetitions give three benchmark scores. Report the mean and **sample standard deviation of those three scores**, measuring variation between test repetitions of the same frozen State.
 
 For an overall score on a common scale, first average the selected benchmarks' scores within repetition 1, and likewise for repetitions 2 and 3. Calculate the mean and sample standard deviation of those three overall scores. Do not average per-case or per-benchmark standard deviations. Use the requested repetition count if it differs from three; one repetition has no sample standard deviation. Average all repetitions rather than selecting the best, and do not label this score pass@k.
 
-Include recorded total cost, elapsed time, incomplete runs, method deviations and paths to the frozen Skills and results. When S0 and final are identical, differences in their independent test scores are measurement variation, not a learned change.
+Include incomplete runs, method deviations and paths to the frozen Skills and results. Mark unavailable cost, time or token values as unknown.

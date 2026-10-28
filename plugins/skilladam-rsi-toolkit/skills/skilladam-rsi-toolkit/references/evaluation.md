@@ -14,13 +14,30 @@ Follow the selected benchmark's retry rules. A diagnosed infrastructure failure 
 
 ## Read native results
 
-For a scored Harbor trial, take reward from the trial's `verifier_result.rewards` using the benchmark's declared metric and scale. Convert a normalized `0..1` reward to `0..100` for reporting; preserve other metric scales as documented. Use the trial's `agent_result.cost_usd` when present, execution timestamps for duration, and actual model usage/outcome for runtime identity. Missing grade data is incomplete; a measured zero is valid.
+For a scored Harbor trial, take reward from the trial's `verifier_result.rewards` using the benchmark's declared metric and scale. Convert a normalized `0..1` reward to `0..100` for reporting; preserve other metric scales as documented. Collect cost and token usage from `agent_result`, timestamps from the native execution records, and actual model usage/outcome for runtime identity. Missing grade data is incomplete; a measured zero is valid.
 
-For training, collect the final answer grades from the benchmark's documented result artifacts. Each continuous learning trial contributes its cost and duration once. Read no-Skill, S0, current/candidate scores, decisions and optimizer history from the learner's indexed records for the learning curve. Use the same display scale as Test while retaining the raw values. Keep online measurements distinct from the final verifier grade.
+For training, collect the final answer grades from the benchmark's documented result artifacts. Each continuous learning trial contributes its cost and duration once. Read the initialization and current/candidate scores, decisions and optimizer history from the learner's indexed records for the learning curve. Use the same display scale as Test while retaining the raw values. Keep online measurements distinct from the final verifier grade.
 
-For Test, gather every requested case in each of the three repetitions for every frozen version. All repetitions of a version use the same State archive and digest. All versions use the same task set, base State, model, tools and scoring conditions; each trial begins with a fresh environment and conversation. Test feedback never revises a learned Skill. With N held-out cases and three comparison States, three test repetitions require 9N task trials; training is performed once.
+For Test, gather every requested case in each repetition for the pre-training base State and final learned State. All repetitions of a version use the same State archive and digest. Both versions use the same task set, base State, model, tools and scoring conditions; each trial begins with a fresh environment and conversation. Test feedback never revises a learned Skill. With N held-out cases and R repetitions, the two States need 2RN task trials (6N at the default of three repetitions). Training is performed once.
 
 Reconcile the experiment index with native trial results, matching each score to the case and frozen State actually evaluated. Keep failed or superseded attempts separately, with their costs and reasons. In progress reports, show completed coverage and compare versions only on their shared completed cases.
+
+## Record cost, time and tokens
+
+Keep these measurements together at the following granularity:
+
+| Record | Scope |
+| --- | --- |
+| Training | One record for the complete training run that produces one learned Skill, identified by benchmark/training unit and exported Skill/State version. Include initialization, candidate proposals, accepted and rejected evaluations, and delegated calls within that run. |
+| Test | One record for each benchmark, frozen State, test case and repetition. Keep its score, cost, time and token usage together. |
+
+Each record includes cost in USD, start and finish timestamps, elapsed duration, input tokens, output tokens and total tokens. Include cached-token usage when available, and keep the native trial/session and artifact paths so the measurements can be traced back.
+
+For Harbor, read `agent_result.cost_usd`, `n_input_tokens`, `n_output_tokens` and `n_cache_tokens` when supplied. Total tokens are input plus output; cached tokens are already included in input and are not added again. Use the native trial's start and finish timestamps for elapsed wall-clock duration, with the same timing boundary for Train and Test. Preserve agent-only execution time separately when available.
+
+Sum costs and tokens into separate Train and Test totals, retaining the per-Skill and per-case records. Count each underlying request once: session/model breakdowns and parent/child summaries may describe the same usage. Keep controller and scheduling usage separate from the training and test trials, and include it once in the experiment total.
+
+Report summed training durations and summed test durations separately from actual experiment wall-clock time; concurrent trials overlap. Keep failed-attempt usage visible in the totals. Mark missing measurements as unknown (`null` in structured output), and label any partial totals rather than treating missing usage as zero.
 
 ## Publish to the Evaluation Center
 
@@ -51,9 +68,11 @@ Append the returned record under `evaluations` in that Benchmark's scoreboard an
 
 A combined training task may be **one published Train case** containing several questions. Map it as the selected benchmark declares, measured using the initial learner State, with `runs: 1`. Its final grade is not an independent evaluation of a frozen candidate Skill. Keep the inner learning curve in the experiment output rather than inventing separate Harbor trial identities for its questions.
 
-For Test, publish one matrix per benchmark/training unit and frozen version, covering every held-out case with `runs: 3` by default. Each case has cells with `run: 1`, `run: 2` and `run: 3`, all measured from the same frozen State. No-Skill, S0 and final each have their own matrix. If the request changes the test repetition count, use that count in both the matrix and its spec.
+For Test, publish one matrix per benchmark/training unit and frozen version, covering every held-out case with `runs: 3` by default. Each case has cells with `run: 1`, `run: 2` and `run: 3`, all measured from the same frozen State. The pre-training baseline and final State each have a matrix. If the request changes the test repetition count, use that count in both the matrix and its spec. Keep detailed versions and token usage in the experiment report alongside these standard Evaluation Center entries.
 
 ## Finish the experiment report
+
+Include the fixed experiment/report version and the resolved runtime, benchmark, model, toolkit and measured Skill/State versions recorded during [initialization](initialization.md). Each report must identify the actual versions used, with user-specified versions taking priority.
 
 For each frozen State, each test repetition includes every selected test case. Apply the benchmark's aggregation rule separately to each repetition. For a benchmark scored by the mean of N test cases, with R test repetitions:
 
@@ -63,14 +82,16 @@ mean = sum_r repeat_score[r] / R
 sample_std = sqrt(sum_r (repeat_score[r] - mean)^2 / (R - 1))
 ```
 
-Report `mean ± sample_std` and retain the R repetition scores. For example, three complete-test means of 60, 70 and 80 give `70 ± 10`. The standard deviation measures variation between complete test repetitions of the same frozen State. Calculate this standard deviation from repetition scores, not pooled case scores or an average of per-case standard deviations.
+Report `mean ± std`, where `std = sample_std`, and retain the R repetition scores. For example, three complete-test means of 60, 70 and 80 give `70 ± 10`. The standard deviation measures variation between complete test repetitions of the same frozen State. Calculate this standard deviation from repetition scores, not pooled case scores or an average of per-case standard deviations. Per-case summaries use that case's own R scores; preserve the individual measurements with their resource usage.
 
 For an aggregate across benchmarks on a common scale, average the same selected benchmarks within each repetition. This gives R overall scores; apply the mean and sample-standard-deviation formulas to those scores. Do not average the benchmarks' standard deviations.
 
 One test repetition has no sample standard deviation. Train has one measured learning curve and no across-training-run standard deviation. Keep Train and Test separate.
 
-Separate the gain from initialization (no Skill to S0) from the gain after optimization (S0 to final). Show rejected candidates separately from the retained-Skill curve. When S0 and final contain identical Skill files, describe any difference between their test scores as variation between repeated measurements.
+Always report the pre-training baseline and final Test scores, with their `mean`, `std` and final-minus-baseline gain. These are measurements of the same held-out set using the frozen base and learned States; training scores do not substitute for either.
 
-The Evaluation Center's cost and duration fields are averages, not experiment totals. Calculate total cost separately from the native trials and recorded controller/worker usage, counting each underlying model run once; do not add child usage again when a parent total already includes it. Mark unavailable costs as unknown. Record actual wall-clock time separately from summed trial durations.
+For SkillAdam, retain the measured training curve through initialization and each optimization iteration, with the per-case measurements and acceptance decisions. Show rejected candidates separately from the retained-Skill curve and keep the final training verifier grade distinct. If no iterative training measurements exist, report the available scores without inventing a curve.
+
+The Evaluation Center's cost and duration fields are averages, not experiment totals. Include the separate Train/Test cost, time and token totals and their detailed records from the measurement section above.
 
 Keep frozen State archives, source identities, per-case results and artifact paths with the report. Save both a readable summary and structured scores, and deliver the results in the user's requested format. Continue scheduling until training and every requested test repetition are accounted for; report a concrete blocker when completion is impossible.

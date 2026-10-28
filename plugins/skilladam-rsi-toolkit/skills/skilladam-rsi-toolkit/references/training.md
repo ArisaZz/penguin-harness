@@ -1,7 +1,7 @@
 ---
 name: skilladam-training
 description: "Run SkillAdam on the supplied training tasks in a continuing Session: initialize a Skill from execution feedback, evolve it with an issue tracker and adaptive edit budget, then export the learned Skill."
-version: 2026.10.28.2
+version: 2026.10.28.4
 ---
 
 # Train with SkillAdam
@@ -14,7 +14,7 @@ The **working Skill** is the task-solving document you produce and improve; it i
 
 ## The idea
 
-Start with task executions and their feedback, and use them to write an initial Skill, S0. Repeatedly observe how the current Skill performs, propose an edit, and evaluate the candidate on the same training cases. A benchmark-specific acceptance rule determines whether to retain it.
+Start with task executions and their feedback, and use them to write an initial Skill. Repeatedly observe how the current Skill performs, propose an edit, and evaluate the candidate on the same training cases. A benchmark-specific acceptance rule determines whether to retain it.
 
 SkillAdam carries two kinds of information between iterations:
 
@@ -34,7 +34,7 @@ Use the supplied benchmark's input locations, feedback API or command, metric de
 ## Initialize
 
 1. Run the initialization tasks without a learned working Skill. Save the answers, trajectories and evaluator feedback as the raw baseline.
-2. From that evidence, write S0: reusable procedures that explain successful approaches and address observed failures. Give it a stable Skill name, description and version in YAML frontmatter. Preserve the complete S0 folder, including supporting files, as the initialization result.
+2. From that evidence, write an initial Skill: reusable procedures that explain successful approaches and address observed failures. Give it a stable Skill name, description and version in YAML frontmatter. Preserve the complete Skill folder, including supporting files, as the initialization result.
 3. Set the EIT to an empty issue list, the running variance `V` to zero and the first edit budget to `base_budget`.
 
 Task-specific answers belong in rollout records. The Skill should describe how to solve future tasks.
@@ -81,12 +81,12 @@ Use the parameters from the training request and pass the saved running variance
 
 ## Keep the learning record
 
-Save the no-Skill answers, feedback and trajectories; the complete S0 folder; each current/candidate rollout, proposed diff and decision; and the EIT, variance and budget after each iteration. Keep complete feedback responses alongside their numerical score maps. Include exact artifact paths in a compact index so the controller can collect them. Use the export directory supplied by the benchmark and training request.
+Save the no-Skill answers, feedback and trajectories; the initial Skill folder; each current/candidate rollout, proposed diff and decision; and the EIT, variance and budget after each iteration. Keep complete feedback responses alongside their numerical score maps. Include exact artifact paths in a compact index so the controller can collect them. Use the export directory supplied by the benchmark and training request.
 
-A useful layout is `stage0/`, `S0/`, `iterations/001/`, `state.json` and `summary.json`. These names are organizational choices, not additional acceptance conditions. Record the first measured S0 score and each iteration's retained-Skill score; do not replace fluctuating measurements with a cumulative best score. If the experiment requests an S0 training score, measure it even when no proposal iterations are requested.
+A useful layout is `stage0/`, `initial-skill/`, `iterations/001/`, `state.json` and `summary.json`. These names are organizational choices, not additional acceptance conditions. Record the initial Skill's first measured training score and each iteration's retained-Skill score; do not replace fluctuating measurements with a cumulative best score. If the experiment requests an initial Skill training score, measure it even when no proposal iterations are requested.
 
 ## Freeze and report
 
-Return the **last accepted Skill** after the configured iterations. Preserve S0, every proposed edit, its measurements and decision, and the tracker and budget history. Export the complete retained Skill folder and the requested final training answers. Use answers from that Skill's measured rollout; if it covered only a batch, complete any remaining required answers with the same retained Skill. The experiment controller will freeze these artifacts and arrange held-out tests in separate environments. Test feedback is not an optimization input.
+Return the **last accepted Skill** after the configured iterations. Preserve the initial Skill, every proposed edit, its measurements and decision, and the tracker and budget history. Export the complete retained Skill folder and the requested final training answers. Use answers from that Skill's measured rollout; if it covered only a batch, complete any remaining required answers with the same retained Skill. The experiment controller will freeze these artifacts and arrange held-out tests in separate environments. Test feedback is not an optimization input.
 
 Report training coverage and changes, initialization and optimization effects separately, accepted/rejected proposals, costs where recorded, artifact paths and any unfinished work or departures from the requested method. This run's Skill and optimizer history belong only to this training unit. The controller reuses the frozen result for repeated tests after learning ends.
